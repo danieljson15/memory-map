@@ -15,6 +15,7 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -25,6 +26,7 @@ export default function Home() {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         setSession(newSession);
+        if (newSession) setShowAuth(false);
       },
     );
 
@@ -37,7 +39,7 @@ export default function Home() {
     return <div className="loading-screen">Loading Memory Map...</div>;
   }
 
-  if (!session) {
+  if (!session && showAuth) {
     return <AuthScreen />;
   }
 
@@ -61,18 +63,27 @@ export default function Home() {
           <h1 className="brand">
             Memory <span className="brand-mark">Map</span>
           </h1>
-          <button
-            className="signout-btn"
-            onClick={() => supabase.auth.signOut()}
-          >
-            Sign out
-          </button>
+          {session ? (
+            <button
+              className="signout-btn"
+              onClick={() => supabase.auth.signOut()}
+            >
+              Sign out
+            </button>
+          ) : (
+            <button
+              className="signout-btn"
+              onClick={() => setShowAuth(true)}
+            >
+              Sign in
+            </button>
+          )}
         </div>
       </LiquidGlass>
 
       <main className="map-stage">
         <div className="map-frame">
-          <MapView userId={session.user.id} />
+          <MapView userId={session?.user.id} />
         </div>
       </main>
     </div>

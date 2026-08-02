@@ -77,7 +77,7 @@ function MapResizeFix() {
 }
 
 interface MapViewProps {
-  userId: string;
+  userId?: string;
 }
 
 export default function MapView({ userId }: MapViewProps) {
@@ -201,7 +201,12 @@ export default function MapView({ userId }: MapViewProps) {
         />
         <ZoomControl position="bottomleft" />
 
-       <ClickCatcher onMapClick={(lat, lng) => setPendingCoords({ lat, lng })} />
+       <ClickCatcher
+          onMapClick={(lat, lng) => {
+            if (!userId) return;
+            setPendingCoords({ lat, lng });
+          }}
+        />
 <MapResizeFix />
 
         {pins.map((pin) => (
@@ -210,26 +215,28 @@ export default function MapView({ userId }: MapViewProps) {
             position={[pin.lat, pin.lng]}
             icon={pinIcon}
           >
-            <Popup>
+            <Popup minWidth={350} maxWidth={460}>
               <div className="pin-popup">
                 <h3>{pin.title}</h3>
                 {photosByPin[pin.id] && (
                   <img src={photosByPin[pin.id]} alt={pin.title} />
                 )}
                 {pin.note && <p>{pin.note}</p>}
-                <button
-                  className="delete-link"
-                  onClick={() => handleDelete(pin)}
-                >
-                  Delete
-                </button>
+                {userId && (
+                  <button
+                    className="delete-link"
+                    onClick={() => handleDelete(pin)}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </Popup>
           </Marker>
         ))}
       </MapContainer>
 
-      {pendingCoords && (
+      {pendingCoords && userId && (
         <PinModal
           lat={pendingCoords.lat}
           lng={pendingCoords.lng}

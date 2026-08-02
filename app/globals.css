@@ -106,11 +106,16 @@ button {
   gap: 1.5rem;
 }
 
+/* Fixed (non-theme-swapping) color: the glass pill below is always a light
+   frosted tint regardless of app theme (overLight), so dark-mode's near-white
+   --color-text would nearly vanish against it — same issue solved for
+   .modal-card below. */
 .brand {
   font-size: 1.15rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0;
+  color: #1d1d1f;
 }
 
 .brand-mark {
@@ -119,8 +124,8 @@ button {
 
 .signout-btn {
   background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: #1d1d1f;
   padding: 0.45rem 1rem;
   border-radius: var(--radius-pill);
   font-size: 0.85rem;
@@ -167,7 +172,21 @@ button {
 
 /* Place search — a text input backed by a scrolling results list, which is
    exactly the "dense/text-heavy" case the design brief says to keep flat
-   rather than glass. */
+   rather than glass. (Also tried as LiquidGlass — reverted: the library's
+   Fragment output includes several decorative sibling elements alongside
+   the actual glass box, and when the wrapper isn't given the library's
+   intended `position: absolute` + centered `top`/`left` treatment (see
+   "Liquid glass specifics" in CLAUDE.md), those siblings stay in normal
+   document flow as `position: relative` boxes sized to match the glass
+   element — invisible in this project since it has no Tailwind for their
+   `bg-black`/`opacity-*` classNames to resolve, but still occupying real
+   layout height, which pushed later flow siblings — like this dropdown —
+   down by unpredictable amounts. Forcing a new stacking context via
+   `isolation: isolate` to contain a separate backdrop-filter bleed made it
+   worse, breaking backdrop-filter's ability to sample the map behind it at
+   all. This library only reliably works for elements matching the topbar's
+   pattern: absolutely positioned with an explicit centered `top`/`left`,
+   not normal in-flow placement.) */
 .search-box {
   position: absolute;
   top: 1rem;
@@ -411,7 +430,6 @@ button {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.18);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   display: flex;
@@ -485,22 +503,39 @@ button {
   margin-top: 0;
 }
 
-/* Pin detail popup inside Leaflet — floats over the map, so it gets glass */
+/* Pin detail popup inside Leaflet — floats over the map, so it gets glass.
+   Leaflet's popup chrome (.leaflet-popup-content-wrapper/-tip) is Leaflet's
+   own DOM, built and positioned outside React's tree, so it can't be
+   wrapped in the actual `liquid-glass-react` component the way the topbar/
+   modal are (that component's Fragment output and self-centering transform
+   assume it controls its own placement — see "Liquid glass specifics" in
+   CLAUDE.md, and the reverted search-box attempt above for what happens
+   when that assumption doesn't hold). This is a hand-tuned CSS
+   approximation instead, using the same fixed (non-theme-swapping) light
+   frosted look as `.modal-card`/the topbar's `overLight` glass — the
+   original version used the theme-swapping `--glass-*`/`--color-text`
+   variables, which in dark-mode OSes rendered as a plain dark-gray box
+   with no visible frost/refraction, quite unlike the other glass
+   surfaces. */
 .leaflet-popup-content-wrapper {
-  background: var(--glass-bg);
-  color: var(--color-text);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+  color: #1d1d1f;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--radius-lg);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 var(--glass-highlight);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+    0 20px 60px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  backdrop-filter: blur(24px) saturate(190%);
 }
 
 .leaflet-popup-tip {
-  background: var(--glass-bg);
+  background: rgba(255, 255, 255, 0.72);
   box-shadow: none;
+}
+
+.leaflet-popup-content {
+  margin: 1.5rem 1.75rem;
 }
 
 .leaflet-container {
@@ -510,27 +545,30 @@ button {
 
 .pin-popup h3 {
   font-weight: 600;
-  margin: 0 0 0.25rem;
-  font-size: 1.02rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
 }
 
 .pin-popup p {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
+  margin: 0 0 0.85rem;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  color: #3a3a3d;
 }
 
 .pin-popup img {
   width: 100%;
   border-radius: var(--radius-sm);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.85rem;
 }
 
 .pin-popup .delete-link {
   background: none;
   border: none;
-  color: var(--color-danger);
-  font-size: 0.8rem;
+  color: #d70015;
+  font-size: 1rem;
+  font-weight: 500;
   padding: 0;
 }
 

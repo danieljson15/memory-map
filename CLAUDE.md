@@ -62,7 +62,9 @@ shell:
   the zoom to the actual place rather than guessing a zoom level by type.
   Rendered flat (not glass) — a text input backed by a scrolling result
   list is exactly the "dense/text-heavy" case the design brief says to
-  keep flat. Note: selecting a result sets the input's text to
+  keep flat. (Also tried as `LiquidGlass` and reverted — see the comment
+  above `.search-box` in `globals.css` and "Liquid glass specifics" below
+  for why.) Note: selecting a result sets the input's text to
   `display_name`, which would normally re-trigger the debounced search
   effect on that new value — a `skipNextSearchRef` flag suppresses that one
   re-trigger; don't remove it without replacing the guard some other way.
@@ -184,6 +186,26 @@ place an absolutely-positioned element; reverse-engineered by reading
   entrance animation does double duty this way — it's why the modal doesn't
   need the same explicit center-point styling the nav pill does. Removing
   that animation would bring back the off-position bug.
+- **This library only reliably works for elements matching the topbar's
+  pattern — `position: absolute` with an explicit centered `top`/`left`.**
+  The search box was tried as `LiquidGlass` and reverted after several
+  rounds of visual bugs; see the comment above `.search-box` in
+  `globals.css` for the full account. Short version: the component's
+  Fragment output includes several decorative sibling elements (black-tint
+  overlays, highlight-gradient spans) alongside the actual glass box. When
+  the wrapper isn't given the "absolute + centered top/left" treatment,
+  those siblings default to `position: relative` boxes sized to match the
+  glass element — invisible in this project (no Tailwind for their
+  `bg-black`/`opacity-*` classNames to resolve), but still occupying real
+  document-flow height, which silently pushed unrelated later content down
+  by unpredictable amounts. A targeted fix for one symptom
+  (`transform: none !important` to stop a self-centering-transform
+  mis-position, or `isolation: isolate` to contain a backdrop-filter bleed)
+  kept surfacing a *new* symptom rather than converging — `isolation:
+  isolate` in particular broke backdrop-filter's ability to sample the
+  page behind it entirely, since it walled the glass element into its own
+  empty stacking context. Don't reach for this library for anything outside
+  the proven absolute-positioned pattern without expecting the same fight.
 - `overLight` biases the glass toward a light/frosted look regardless of
   the app's own dark/light theme — text on top of glass surfaces should use
   fixed, non-theme-swapping colors (see `.modal-card`'s color rules) rather

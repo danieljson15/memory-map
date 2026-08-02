@@ -1,272 +1,246 @@
--- Memory Map — full schema
--- Run this whole file once in the Supabase SQL Editor for your project.
--- Supersedes the earlier MVP schema — this adds photos as a separate
--- table, kind (memory/wishlist), embeddings, trips, checklist, and the
--- AI suggester's tables.
+-- Public read / owner-only write.
+-- Run this in the Supabase SQL Editor AFTER schema.sql. Replaces the
+-- earlier "any authenticated user can do anything" policies — those
+-- only made sense while sign-up was meant to be invite-only, which it
+-- currently isn't (see AuthScreen.tsx: open self-service sign-up).
+--
+-- BEFORE RUNNING: replace the two placeholder emails below with your
+-- real two accounts' emails.
 
-create extension if not exists vector;
+-- =========================================================
+-- Config: the only two identities allowed to write
+-- =========================================================
+-- Using email via auth.jwt() rather than hardcoded UUIDs — means you
+-- don't need to look up user IDs first, and it still works cleanly if
+-- an account ever needs to be recreated.
 
 -- =========================================================
 -- Pins
 -- =========================================================
 
-create table if not exists pins (
-  id uuid primary key default gen_random_uuid(),
-  kind text not null check (kind in ('memory', 'wishlist')),
-  lat double precision not null,
-  lng double precision not null,
-  title text not null,
-  note text,
-  -- voyage-3.5-lite / voyage-4-lite at 1024 dimensions (default).
-  -- If you pick a different embeddings model, this must match its
-  -- output dimension exactly, or inserts will fail.
-  embedding vector(1024),
-  created_by uuid not null references auth.users (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+drop policy if exists "Authenticated users can read pins" on pins;
+drop policy if exists "Authenticated users can insert pins" on pins;
+drop policy if exists "Authenticated users can update pins" on pins;
+drop policy if exists "Authenticated users can delete pins" on pins;
 
-create index if not exists pins_kind_idx on pins (kind);
-
--- Cosine-similarity index for the AI suggester's taste-ranking step.
--- HNSW works without needing the table pre-populated first, unlike
--- ivfflat, so it's safe to create right away even with an empty table.
-create index if not exists pins_embedding_idx
-  on pins using hnsw (embedding vector_cosine_ops);
-
-alter table pins enable row level security;
-
-create policy "Authenticated users can read pins"
+drop policy if exists "Anyone can read pins" on pins;
+create policy "Anyone can read pins"
   on pins for select
-  to authenticated
+  to public
   using (true);
 
-create policy "Authenticated users can insert pins"
+drop policy if exists "Only owners can insert pins" on pins;
+create policy "Only owners can insert pins"
   on pins for insert
   to authenticated
-  with check (true);
+  with check (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can update pins"
+drop policy if exists "Only owners can update pins" on pins;
+create policy "Only owners can update pins"
   on pins for update
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can delete pins"
+drop policy if exists "Only owners can delete pins" on pins;
+create policy "Only owners can delete pins"
   on pins for delete
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
 -- =========================================================
 -- Pin photos
--- One pin can have several photos, uploaded directly to storage from
--- the browser, then registered here via POST /api/pins/:id/photos.
 -- =========================================================
 
-create table if not exists pin_photos (
-  id uuid primary key default gen_random_uuid(),
-  pin_id uuid not null references pins (id) on delete cascade,
-  storage_path text not null,
-  created_by uuid not null references auth.users (id),
-  created_at timestamptz not null default now()
-);
+drop policy if exists "Authenticated users can read pin photos" on pin_photos;
+drop policy if exists "Authenticated users can insert pin photos" on pin_photos;
+drop policy if exists "Authenticated users can delete pin photos" on pin_photos;
 
-create index if not exists pin_photos_pin_id_idx on pin_photos (pin_id);
-
-alter table pin_photos enable row level security;
-
-create policy "Authenticated users can read pin photos"
+drop policy if exists "Anyone can read pin photos" on pin_photos;
+create policy "Anyone can read pin photos"
   on pin_photos for select
-  to authenticated
+  to public
   using (true);
 
-create policy "Authenticated users can insert pin photos"
+drop policy if exists "Only owners can insert pin photos" on pin_photos;
+create policy "Only owners can insert pin photos"
   on pin_photos for insert
   to authenticated
-  with check (true);
+  with check (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can delete pin photos"
+drop policy if exists "Only owners can delete pin photos" on pin_photos;
+create policy "Only owners can delete pin photos"
   on pin_photos for delete
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
 -- =========================================================
 -- Trips
 -- =========================================================
 
-create table if not exists trips (
-  id uuid primary key default gen_random_uuid(),
-  title text not null,
-  start_date date,
-  end_date date,
-  created_by uuid not null references auth.users (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+drop policy if exists "Authenticated users can read trips" on trips;
+drop policy if exists "Authenticated users can insert trips" on trips;
+drop policy if exists "Authenticated users can update trips" on trips;
+drop policy if exists "Authenticated users can delete trips" on trips;
 
-alter table trips enable row level security;
-
-create policy "Authenticated users can read trips"
+drop policy if exists "Anyone can read trips" on trips;
+create policy "Anyone can read trips"
   on trips for select
-  to authenticated
+  to public
   using (true);
 
-create policy "Authenticated users can insert trips"
+drop policy if exists "Only owners can insert trips" on trips;
+create policy "Only owners can insert trips"
   on trips for insert
   to authenticated
-  with check (true);
+  with check (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can update trips"
+drop policy if exists "Only owners can update trips" on trips;
+create policy "Only owners can update trips"
   on trips for update
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can delete trips"
+drop policy if exists "Only owners can delete trips" on trips;
+create policy "Only owners can delete trips"
   on trips for delete
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
 -- =========================================================
 -- Checklist items
 -- =========================================================
 
-create table if not exists checklist_items (
-  id uuid primary key default gen_random_uuid(),
-  trip_id uuid not null references trips (id) on delete cascade,
-  text text not null,
-  is_done boolean not null default false,
-  created_by uuid not null references auth.users (id),
-  created_at timestamptz not null default now()
-);
+drop policy if exists "Authenticated users can read checklist items" on checklist_items;
+drop policy if exists "Authenticated users can insert checklist items" on checklist_items;
+drop policy if exists "Authenticated users can update checklist items" on checklist_items;
+drop policy if exists "Authenticated users can delete checklist items" on checklist_items;
 
-create index if not exists checklist_items_trip_id_idx
-  on checklist_items (trip_id);
-
-alter table checklist_items enable row level security;
-
-create policy "Authenticated users can read checklist items"
+drop policy if exists "Anyone can read checklist items" on checklist_items;
+create policy "Anyone can read checklist items"
   on checklist_items for select
-  to authenticated
+  to public
   using (true);
 
-create policy "Authenticated users can insert checklist items"
+drop policy if exists "Only owners can insert checklist items" on checklist_items;
+create policy "Only owners can insert checklist items"
   on checklist_items for insert
   to authenticated
-  with check (true);
+  with check (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can update checklist items"
+drop policy if exists "Only owners can update checklist items" on checklist_items;
+create policy "Only owners can update checklist items"
   on checklist_items for update
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can delete checklist items"
+drop policy if exists "Only owners can delete checklist items" on checklist_items;
+create policy "Only owners can delete checklist items"
   on checklist_items for delete
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
 -- =========================================================
--- AI suggester: suggestions + their reasoning steps
+-- Suggestions + steps
 -- =========================================================
 
-create table if not exists suggestions (
-  id uuid primary key default gen_random_uuid(),
-  status text not null default 'running'
-    check (status in ('running', 'complete', 'failed')),
-  budget numeric,
-  departure_airport text,
-  travel_month text,
-  nights integer,
-  destination text,
-  -- flights / lodging / food / activities, each line editable client-side,
-  -- totals recomputed server-side per the brief
-  cost_breakdown jsonb,
-  total_cost numeric,
-  created_by uuid not null references auth.users (id),
-  created_at timestamptz not null default now(),
-  completed_at timestamptz
-);
+drop policy if exists "Authenticated users can read suggestions" on suggestions;
+drop policy if exists "Authenticated users can insert suggestions" on suggestions;
+drop policy if exists "Authenticated users can update suggestions" on suggestions;
 
-alter table suggestions enable row level security;
-
-create policy "Authenticated users can read suggestions"
+drop policy if exists "Anyone can read suggestions" on suggestions;
+create policy "Anyone can read suggestions"
   on suggestions for select
-  to authenticated
+  to public
   using (true);
 
-create policy "Authenticated users can insert suggestions"
+drop policy if exists "Only owners can insert suggestions" on suggestions;
+create policy "Only owners can insert suggestions"
   on suggestions for insert
   to authenticated
-  with check (true);
+  with check (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can update suggestions"
+drop policy if exists "Only owners can update suggestions" on suggestions;
+create policy "Only owners can update suggestions"
   on suggestions for update
   to authenticated
-  using (true);
+  using (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create table if not exists suggestion_steps (
-  id uuid primary key default gen_random_uuid(),
-  suggestion_id uuid not null references suggestions (id) on delete cascade,
-  step_order integer not null,
-  kind text not null check (kind in ('text', 'tool_call')),
-  content jsonb not null,
-  created_at timestamptz not null default now()
-);
+drop policy if exists "Authenticated users can read suggestion steps" on suggestion_steps;
+drop policy if exists "Authenticated users can insert suggestion steps" on suggestion_steps;
 
-create index if not exists suggestion_steps_suggestion_id_idx
-  on suggestion_steps (suggestion_id);
-
-alter table suggestion_steps enable row level security;
-
-create policy "Authenticated users can read suggestion steps"
+drop policy if exists "Anyone can read suggestion steps" on suggestion_steps;
+create policy "Anyone can read suggestion steps"
   on suggestion_steps for select
-  to authenticated
+  to public
   using (true);
 
-create policy "Authenticated users can insert suggestion steps"
+drop policy if exists "Only owners can insert suggestion steps" on suggestion_steps;
+create policy "Only owners can insert suggestion steps"
   on suggestion_steps for insert
   to authenticated
-  with check (true);
+  with check (
+    (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
 -- =========================================================
--- updated_at maintenance
+-- Storage: photos bucket
+-- Public content now, so this goes back to public + getPublicUrl(),
+-- same pattern as the original MVP — the private + signed-URL approach
+-- only made sense while photos were meant to be private.
 -- =========================================================
 
-create or replace function set_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
+update storage.buckets set public = true where id = 'photos';
 
-create trigger pins_set_updated_at
-  before update on pins
-  for each row execute function set_updated_at();
+drop policy if exists "Authenticated users can upload photos" on storage.objects;
+drop policy if exists "Authenticated users can read photos" on storage.objects;
+drop policy if exists "Authenticated users can delete photos" on storage.objects;
 
-create trigger trips_set_updated_at
-  before update on trips
-  for each row execute function set_updated_at();
+drop policy if exists "Anyone can view photos" on storage.objects;
+create policy "Anyone can view photos"
+  on storage.objects for select
+  to public
+  using (bucket_id = 'photos');
 
--- =========================================================
--- Storage bucket for photos — PRIVATE.
--- The brief calls for signed URLs generated client-side, not public
--- URLs, so this bucket must not be public like the MVP's was.
--- =========================================================
-
-insert into storage.buckets (id, name, public)
-values ('photos', 'photos', false)
-on conflict (id) do nothing;
-
-create policy "Authenticated users can upload photos"
+drop policy if exists "Only owners can upload photos" on storage.objects;
+create policy "Only owners can upload photos"
   on storage.objects for insert
   to authenticated
-  with check (bucket_id = 'photos');
+  with check (
+    bucket_id = 'photos'
+    and (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );
 
-create policy "Authenticated users can read photos"
-  on storage.objects for select
-  to authenticated
-  using (bucket_id = 'photos');
-
-create policy "Authenticated users can delete photos"
+drop policy if exists "Only owners can delete photos" on storage.objects;
+create policy "Only owners can delete photos"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'photos');
+  using (
+    bucket_id = 'photos'
+    and (auth.jwt() ->> 'email') in ('you@example.com', 'partner@example.com')
+  );

@@ -9,7 +9,7 @@
 // for documents) actually work well. Getting this backwards doesn't
 // error, it just quietly hurts ranking quality.
 
-const VOYAGE_EMBEDDINGS_URL = "https://api.voyageai.com/v1/embeddings";
+const VOYAGE_EMBEDDINGS_URL = "https://ai.mongodb.com/v1/embeddings";
 const EMBEDDING_MODEL = "voyage-4-lite";
 const EMBEDDING_DIMENSION = 1024; // must match the `vector(1024)` column in schema.sql
 
