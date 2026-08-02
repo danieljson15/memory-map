@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import LiquidGlass from "liquid-glass-react";
 import { supabase } from "@/lib/supabaseClient";
 import type { Pin } from "@/lib/types";
 
@@ -83,8 +84,20 @@ export default function PinModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <LiquidGlass
+        className="modal-card"
+        padding="1.75rem"
+        cornerRadius={22}
+        displacementScale={50}
+        aberrationIntensity={1}
+        overLight
+      >
         <h2>New memory</h2>
 
         <form onSubmit={handleSave}>
@@ -136,7 +149,7 @@ export default function PinModal({
             </button>
           </div>
         </form>
-      </div>
+      </LiquidGlass>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import LiquidGlass from "liquid-glass-react";
 import { supabase } from "@/lib/supabaseClient";
 import AuthScreen from "@/components/AuthScreen";
 
@@ -42,17 +43,32 @@ export default function Home() {
 
   return (
     <div className="shell">
-      <header className="topbar">
-        <h1 className="brand">
-          Memory <span className="brand-mark">Map</span>
-        </h1>
-        <button
-          className="signout-btn"
-          onClick={() => supabase.auth.signOut()}
-        >
-          Sign out
-        </button>
-      </header>
+      {/* LiquidGlass's visible surface always sizes to its content (no
+          full-width/stretch mode) and centers itself on an explicit
+          top/left anchor via its own translate(-50%,-50%) transform, so
+          this renders as a compact floating pill rather than an edge-to-edge
+          bar — top/left below describe its center point, not its corner. */}
+      <LiquidGlass
+        className="topbar"
+        style={{ position: "absolute", top: "3rem", left: "50%", zIndex: 20 }}
+        padding="14px 24px"
+        cornerRadius={22}
+        displacementScale={40}
+        aberrationIntensity={1}
+        overLight
+      >
+        <div className="topbar-inner">
+          <h1 className="brand">
+            Memory <span className="brand-mark">Map</span>
+          </h1>
+          <button
+            className="signout-btn"
+            onClick={() => supabase.auth.signOut()}
+          >
+            Sign out
+          </button>
+        </div>
+      </LiquidGlass>
 
       <main className="map-stage">
         <div className="map-frame">

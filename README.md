@@ -10,7 +10,7 @@ left out of this version — build those on top once this is deployed.
 
 ## Stack
 
-- Next.js 14 (App Router) + TypeScript
+- Next.js 15 (App Router) + React 19 + TypeScript
 - Supabase — Postgres, Auth, Storage
 - react-leaflet — the map
 
@@ -51,10 +51,11 @@ Open http://localhost:3000, sign up, and click the map.
 
 ## Known, accepted issue
 
-`npm audit` will flag a PostCSS source-map-disclosure vulnerability. It only
-affects the local dev server, not the production build or deployment, and
-the fix requires jumping to Next.js 16 (breaking changes). Left as-is for
-now — revisit later if you want to upgrade.
+`npm audit` will flag a PostCSS source-map-disclosure vulnerability bundled
+inside `next`. It only affects the local dev server, not the production
+build or deployment. The vulnerable range currently spans Next's latest
+release, so there's no version bump that clears it yet. Left as-is for
+now — revisit later if a fixed release ships.
 
 ## Notes on scope / tradeoffs
 

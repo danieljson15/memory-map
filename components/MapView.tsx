@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
+  ZoomControl,
   useMapEvents,
   useMap,
 } from "react-leaflet";
@@ -13,10 +14,11 @@ import L from "leaflet";
 import { supabase } from "@/lib/supabaseClient";
 import type { Pin } from "@/lib/types";
 import PinModal from "./PinModal";
+import SearchBox from "./SearchBox";
 
 // Leaflet's default marker icons reference image files that don't resolve
 // correctly under Next.js bundling, so point them at the CDN copies.
-const brassIcon = new L.Icon({
+const pinIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -29,6 +31,23 @@ const brassIcon = new L.Icon({
 
 const EUROPE_CENTER: [number, number] = [50.5, 10.5];
 const EUROPE_ZOOM = 4;
+
+const TILE_THEME_KEY = "memory-map-tile-theme";
+
+const TILE_LAYERS = {
+  light: {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
+  dark: {
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  },
+} as const;
+
+type TileTheme = keyof typeof TILE_LAYERS;
 
 interface ClickCatcherProps {
   onMapClick: (lat: number, lng: number) => void;
@@ -61,6 +80,15 @@ export default function MapView({ userId }: MapViewProps) {
     { lat: number; lng: number } | null
   >(null);
   const [loading, setLoading] = useState(true);
+  const [tileTheme, setTileTheme] = useState<TileTheme>(() => {
+    if (typeof window === "undefined") return "light";
+    return (localStorage.getItem(TILE_THEME_KEY) as TileTheme) || "light";
+  });
+  const mapRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(TILE_THEME_KEY, tileTheme);
+  }, [tileTheme]);
 
   useEffect(() => {
     async function loadPins() {
@@ -91,18 +119,34 @@ export default function MapView({ userId }: MapViewProps) {
   return (
     <>
       {!loading && pins.length === 0 && (
-        <div className="hint-banner">Click anywhere on the map to add your first memory</div>
+        <div className="hint-banner glass-surface">Click anywhere on the map to add your first memory</div>
       )}
 
+      <SearchBox mapRef={mapRef} />
+
+      <button
+        type="button"
+        className="theme-toggle-btn"
+        onClick={() => setTileTheme((t) => (t === "dark" ? "light" : "dark"))}
+        aria-label={tileTheme === "dark" ? "Switch to light map" : "Switch to dark map"}
+        title={tileTheme === "dark" ? "Switch to light map" : "Switch to dark map"}
+      >
+        {tileTheme === "dark" ? "☀️" : "🌙"}
+      </button>
+
       <MapContainer
+        ref={mapRef}
         center={EUROPE_CENTER}
         zoom={EUROPE_ZOOM}
+        zoomControl={false}
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          key={tileTheme}
+          attribution={TILE_LAYERS[tileTheme].attribution}
+          url={TILE_LAYERS[tileTheme].url}
         />
+        <ZoomControl position="bottomleft" />
 
        <ClickCatcher onMapClick={(lat, lng) => setPendingCoords({ lat, lng })} />
 <MapResizeFix />
@@ -111,7 +155,7 @@ export default function MapView({ userId }: MapViewProps) {
           <Marker
             key={pin.id}
             position={[pin.lat, pin.lng]}
-            icon={brassIcon}
+            icon={pinIcon}
           >
             <Popup>
               <div className="pin-popup">
