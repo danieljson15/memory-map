@@ -12,7 +12,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { supabase } from "@/lib/supabaseClient";
-import type { Pin } from "@/lib/types";
+import type { Pin, PinPhoto } from "@/lib/types";
 import PinModal from "./PinModal";
 import SearchBox from "./SearchBox";
 
@@ -80,6 +80,7 @@ export default function MapView({ userId }: MapViewProps) {
     { lat: number; lng: number } | null
   >(null);
   const [loading, setLoading] = useState(true);
+  const [photosByPin, setPhotosByPin] = useState<Record<string, string>>({});
   const [tileTheme, setTileTheme] = useState<TileTheme>(() => {
     if (typeof window === "undefined") return "light";
     return (localStorage.getItem(TILE_THEME_KEY) as TileTheme) || "light";
@@ -91,6 +92,51 @@ export default function MapView({ userId }: MapViewProps) {
   }, [tileTheme]);
 
   useEffect(() => {
+    async function loadPhotos(loadedPins: Pin[]) {
+      if (loadedPins.length === 0) return;
+
+      const { data: photos, error: photosError } = await supabase
+        .from("pin_photos")
+        .select("*")
+        .in(
+          "pin_id",
+          loadedPins.map((p) => p.id),
+        )
+        .order("created_at", { ascending: true });
+
+      if (photosError || !photos) return;
+
+      // First photo per pin — table is one-to-many, but only one is shown.
+      const firstPathByPin: Record<string, string> = {};
+      for (const photo of photos as PinPhoto[]) {
+        if (!firstPathByPin[photo.pin_id]) {
+          firstPathByPin[photo.pin_id] = photo.storage_path;
+        }
+      }
+
+      const paths = Object.values(firstPathByPin);
+      if (paths.length === 0) return;
+
+      const { data: signedUrls, error: signError } = await supabase.storage
+        .from("photos")
+        .createSignedUrls(paths, 3600);
+
+      if (signError || !signedUrls) return;
+
+      const urlByPath: Record<string, string> = {};
+      for (const item of signedUrls) {
+        if (item.path && item.signedUrl) urlByPath[item.path] = item.signedUrl;
+      }
+
+      const urlByPin: Record<string, string> = {};
+      for (const [pinId, path] of Object.entries(firstPathByPin)) {
+        const url = urlByPath[path];
+        if (url) urlByPin[pinId] = url;
+      }
+
+      setPhotosByPin(urlByPin);
+    }
+
     async function loadPins() {
       const { data, error } = await supabase
         .from("pins")
@@ -99,6 +145,7 @@ export default function MapView({ userId }: MapViewProps) {
 
       if (!error && data) {
         setPins(data as Pin[]);
+        await loadPhotos(data as Pin[]);
       }
       setLoading(false);
     }
@@ -160,8 +207,8 @@ export default function MapView({ userId }: MapViewProps) {
             <Popup>
               <div className="pin-popup">
                 <h3>{pin.title}</h3>
-                {pin.photo_url && (
-                  <img src={pin.photo_url} alt={pin.title} />
+                {photosByPin[pin.id] && (
+                  <img src={photosByPin[pin.id]} alt={pin.title} />
                 )}
                 {pin.note && <p>{pin.note}</p>}
                 <button
@@ -182,7 +229,12 @@ export default function MapView({ userId }: MapViewProps) {
           lng={pendingCoords.lng}
           userId={userId}
           onClose={() => setPendingCoords(null)}
-          onCreated={(newPin) => setPins((prev) => [newPin, ...prev])}
+          onCreated={(newPin, photoUrl) => {
+            setPins((prev) => [newPin, ...prev]);
+            if (photoUrl) {
+              setPhotosByPin((prev) => ({ ...prev, [newPin.id]: photoUrl }));
+            }
+          }}
         />
       )}
     </>

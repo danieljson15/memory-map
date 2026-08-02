@@ -10,7 +10,7 @@ interface PinModalProps {
   lng: number;
   userId: string;
   onClose: () => void;
-  onCreated: (pin: Pin) => void;
+  onCreated: (pin: Pin, photoUrl?: string) => void;
 }
 
 export default function PinModal({
@@ -37,7 +37,8 @@ export default function PinModal({
 
     setSaving(true);
 
-    let photoUrl: string | null = null;
+    let photoPath: string | null = null;
+    let photoUrl: string | undefined;
 
     try {
       if (photoFile) {
@@ -45,16 +46,18 @@ export default function PinModal({
         const filePath = `${userId}/${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
-          .from("pin-photos")
+          .from("photos")
           .upload(filePath, photoFile);
 
         if (uploadError) throw uploadError;
 
-        const { data: publicUrlData } = supabase.storage
-          .from("pin-photos")
-          .getPublicUrl(filePath);
+        const { data: signedUrlData, error: signedUrlError } =
+          await supabase.storage.from("photos").createSignedUrl(filePath, 3600);
 
-        photoUrl = publicUrlData.publicUrl;
+        if (signedUrlError) throw signedUrlError;
+
+        photoPath = filePath;
+        photoUrl = signedUrlData.signedUrl;
       }
 
       const { data, error: insertError } = await supabase
@@ -64,7 +67,7 @@ export default function PinModal({
           lng,
           title: title.trim(),
           note: note.trim() || null,
-          photo_url: photoUrl,
+          kind: "memory",
           created_by: userId,
         })
         .select()
@@ -72,7 +75,19 @@ export default function PinModal({
 
       if (insertError) throw insertError;
 
-      onCreated(data as Pin);
+      if (photoPath) {
+        const { error: photoInsertError } = await supabase
+          .from("pin_photos")
+          .insert({
+            pin_id: data.id,
+            storage_path: photoPath,
+            created_by: userId,
+          });
+
+        if (photoInsertError) throw photoInsertError;
+      }
+
+      onCreated(data as Pin, photoUrl);
       onClose();
     } catch (err) {
       const messageText =
