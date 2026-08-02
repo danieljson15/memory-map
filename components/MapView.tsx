@@ -34,11 +34,17 @@ const EUROPE_ZOOM = 4;
 
 const TILE_THEME_KEY = "memory-map-tile-theme";
 
+// Both light and dark use CARTO's basemaps (not raw OSM standard tiles for
+// light) because CARTO's style prefers the `name:en` tag when available,
+// falling back to the local name only if no English translation exists in
+// the OSM data. Raw OSM standard tiles always render the local-language
+// name regardless — that mismatch is why light mode used to show
+// "Україна" while dark mode showed "Ukraine" for the same country.
 const TILE_LAYERS = {
   light: {
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
   },
   dark: {
     url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",

@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "embed:backfill": "tsx scripts/backfill-embeddings.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "leaflet": "^1.9.4",
     "liquid-glass-react": "^1.1.1",
@@ -22,6 +24,8 @@
     "@types/node": "^20.14.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.4"
   }
 }
