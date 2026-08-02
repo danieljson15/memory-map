@@ -65,4 +65,4 @@ now — revisit later if a fixed release ships.
 - No per-user ownership on rows — any signed-in user can edit/delete any
   pin. Matches the "shared" premise; revisit if that ever changes.
 - Map is flat (OpenStreetMap tiles via Leaflet), not the 3D globe from the
-  original vision. That's a deliberate cut for the resume-deadline version.
+  original vision.
