@@ -11,9 +11,10 @@ interface NominatimResult {
 
 interface SearchBoxProps {
   mapRef: React.RefObject<LeafletMap | null>;
+  onSelectLocation?: (lat: number, lng: number, suggestedTitle: string) => void;
 }
 
-export default function SearchBox({ mapRef }: SearchBoxProps) {
+export default function SearchBox({ mapRef, onSelectLocation }: SearchBoxProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<NominatimResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -64,6 +65,12 @@ export default function SearchBox({ mapRef }: SearchBoxProps) {
       ],
       { padding: [40, 40], maxZoom: 15 },
     );
+
+    if (onSelectLocation) {
+      const centerLat = (south + north) / 2;
+      const centerLng = (west + east) / 2;
+      onSelectLocation(centerLat, centerLng, result.display_name);
+    }
 
     skipNextSearchRef.current = true;
     setQuery(result.display_name);

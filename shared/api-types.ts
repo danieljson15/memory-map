@@ -133,3 +133,12 @@ export interface TimelinePage {
   pins: PinWithPhotos[];
   next_cursor: string | null;
 }
+
+export interface RankedWishlistPin {
+  id: string;
+  title: string;
+  note: string | null;
+  lat: number;
+  lng: number;
+  similarity: number;
+}

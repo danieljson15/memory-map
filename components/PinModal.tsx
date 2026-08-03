@@ -9,6 +9,7 @@ interface PinModalProps {
   lat: number;
   lng: number;
   userId: string;
+  initialTitle?: string;
   onClose: () => void;
   onCreated: (pin: Pin, photoUrl?: string) => void;
 }
@@ -17,10 +18,14 @@ export default function PinModal({
   lat,
   lng,
   userId,
+  initialTitle,
   onClose,
   onCreated,
 }: PinModalProps) {
-  const [title, setTitle] = useState("");
+  // Pre-filled from Nominatim's display_name when opened via search-to-pin
+  // (SearchBox -> MapView), but that's often a full address, not a clean
+  // place name — kept fully editable, not assumed to be used verbatim.
+  const [title, setTitle] = useState(initialTitle ?? "");
   const [note, setNote] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);

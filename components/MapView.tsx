@@ -83,7 +83,7 @@ interface MapViewProps {
 export default function MapView({ userId }: MapViewProps) {
   const [pins, setPins] = useState<Pin[]>([]);
   const [pendingCoords, setPendingCoords] = useState<
-    { lat: number; lng: number } | null
+    { lat: number; lng: number; suggestedTitle?: string } | null
   >(null);
   const [loading, setLoading] = useState(true);
   const [photosByPin, setPhotosByPin] = useState<Record<string, string>>({});
@@ -92,6 +92,11 @@ export default function MapView({ userId }: MapViewProps) {
     return (localStorage.getItem(TILE_THEME_KEY) as TileTheme) || "light";
   });
   const mapRef = useRef<L.Map | null>(null);
+  const markerRefs = useRef<Record<string, L.Marker | null>>({});
+  // Guards the "?pin=<id> -> fly to it and open its popup" behavior (used
+  // when arriving from /pins) so it only runs once per mount, not every
+  // time `pins` changes for an unrelated reason (e.g. a new pin created).
+  const focusedFromUrlRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem(TILE_THEME_KEY, tileTheme);
@@ -159,6 +164,34 @@ export default function MapView({ userId }: MapViewProps) {
     loadPins();
   }, []);
 
+  // Arriving from /pins with ?pin=<id> — fly to that pin and open its
+  // popup once it's actually on the map. Runs once per mount; a pin
+  // created afterward (which also updates `pins`) shouldn't re-trigger it.
+  useEffect(() => {
+    if (focusedFromUrlRef.current) return;
+    if (pins.length === 0) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const focusPinId = params.get("pin");
+    if (!focusPinId) return;
+
+    const pin = pins.find((p) => p.id === focusPinId);
+    if (!pin) return;
+
+    focusedFromUrlRef.current = true;
+
+    const map = mapRef.current;
+    const marker = markerRefs.current[pin.id];
+    // Opening the popup immediately (before flyTo's animation settles) gets
+    // it closed within a few hundred ms — Leaflet's own zoom/pan handling
+    // resets the popup layer mid-flight. Waiting for `moveend` avoids the
+    // race; flyTo covering a long distance (e.g. the default Europe view to
+    // a single city) can take several seconds, so the popup opens once the
+    // flight actually finishes rather than immediately on click.
+    map?.once("moveend", () => marker?.openPopup());
+    map?.flyTo([pin.lat, pin.lng], 13);
+  }, [pins]);
+
   async function handleDelete(pin: Pin) {
     const confirmed = window.confirm(`Delete "${pin.title}"?`);
     if (!confirmed) return;
@@ -175,7 +208,15 @@ export default function MapView({ userId }: MapViewProps) {
         <div className="hint-banner glass-surface">Click anywhere on the map to add your first memory</div>
       )}
 
-      <SearchBox mapRef={mapRef} />
+      <SearchBox
+        mapRef={mapRef}
+        onSelectLocation={
+          userId
+            ? (lat, lng, suggestedTitle) =>
+                setPendingCoords({ lat, lng, suggestedTitle })
+            : undefined
+        }
+      />
 
       <button
         type="button"
@@ -214,6 +255,9 @@ export default function MapView({ userId }: MapViewProps) {
             key={pin.id}
             position={[pin.lat, pin.lng]}
             icon={pinIcon}
+            ref={(marker) => {
+              markerRefs.current[pin.id] = marker;
+            }}
           >
             <Popup minWidth={350} maxWidth={460}>
               <div className="pin-popup">
@@ -241,6 +285,7 @@ export default function MapView({ userId }: MapViewProps) {
           lat={pendingCoords.lat}
           lng={pendingCoords.lng}
           userId={userId}
+          initialTitle={pendingCoords.suggestedTitle}
           onClose={() => setPendingCoords(null)}
           onCreated={(newPin, photoUrl) => {
             setPins((prev) => [newPin, ...prev]);

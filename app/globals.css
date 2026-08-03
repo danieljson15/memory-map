@@ -123,9 +123,11 @@ button {
 }
 
 .signout-btn {
+  display: inline-block;
   background: none;
   border: 1px solid rgba(0, 0, 0, 0.15);
   color: #1d1d1f;
+  text-decoration: none;
   padding: 0.45rem 1rem;
   border-radius: var(--radius-pill);
   font-size: 0.85rem;
@@ -142,6 +144,27 @@ button {
 }
 
 .signout-btn:active {
+  transform: scale(0.96);
+}
+
+.suggest-trip-btn {
+  background: var(--color-accent);
+  border: none;
+  color: #ffffff;
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.suggest-trip-btn:hover {
+  background: var(--color-accent-hover);
+}
+
+.suggest-trip-btn:active {
   transform: scale(0.96);
 }
 
@@ -477,6 +500,197 @@ button {
   margin: 0 0 1rem;
 }
 
+/* Suggester modal — same floating-glass-over-dimmed-map treatment as
+   .modal-card (PinModal), reusing .modal-backdrop as-is. Wider than
+   .modal-card since a result view needs room for the cost breakdown and
+   the reasoning-step list; the fixed (non-theme-swapping) colors below
+   follow the same overLight reasoning as .modal-card's. */
+.suggester-card {
+  color: #1d1d1f;
+  animation: modal-pop-in var(--duration-slow) var(--ease-spring) both;
+}
+
+.suggester-card .field label {
+  color: #6e6e73;
+}
+
+.suggester-card .field input {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.15);
+  color: #1d1d1f;
+}
+
+.suggester-card .ghost-btn {
+  border-color: rgba(0, 0, 0, 0.15);
+  color: #6e6e73;
+}
+
+.suggester-card .glass {
+  display: block !important;
+  width: 440px !important;
+  max-width: 100%;
+  /* The library's glass look is pure backdrop-blur with no background
+     color of its own (see "Liquid glass specifics" in CLAUDE.md) — it
+     reads as "frosted" mainly because it's usually sampling a light map.
+     This card carries more text than the other glass surfaces (a full
+     cost table plus several paragraphs of reasoning), so legibility
+     matters more here than the refraction effect; layering an explicit
+     near-opaque white on top (still via !important, for the same
+     inline-style-precedence reason documented above) keeps the glass
+     edge/blur but gives body text real contrast to sit on. */
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.suggester-card h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 1rem;
+}
+
+/* Fixed (non-theme-swapping) colors — same overLight reasoning as
+   everywhere else on this card. */
+.suggester-badge {
+  display: inline-block;
+  margin: -0.6rem 0 1rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 113, 227, 0.1);
+  color: #0058b0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.suggester-loading {
+  padding: 0.5rem 0 1rem;
+}
+
+.suggester-loading p {
+  color: #6e6e73;
+  font-size: 0.9rem;
+  margin: 0;
+  animation: pulse 1.6s var(--ease-standard) infinite;
+}
+
+.cost-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
+}
+
+.cost-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #3a3a3d;
+}
+
+.cost-breakdown .cost-total {
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin-top: 0.3rem;
+  padding-top: 0.5rem;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+/* Makes the embeddings-driven ranking actually visible instead of just
+   implied in the model's prose — the raw rank_wishlist_by_taste output,
+   shown as-is with its similarity scores. */
+.candidates-list {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
+}
+
+.candidates-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6e6e73;
+}
+
+.candidate-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  font-size: 0.85rem;
+  color: #3a3a3d;
+}
+
+.candidate-row.candidate-chosen {
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.candidate-similarity {
+  color: #6e6e73;
+  font-variant-numeric: tabular-nums;
+}
+
+.candidate-chosen .candidate-similarity {
+  color: #0071e3;
+}
+
+.suggester-steps-label {
+  margin: 0 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6e6e73;
+}
+
+.suggester-steps {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.suggester-step {
+  display: flex;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #3a3a3d;
+  animation: fade-in var(--duration-base) var(--ease-standard) both;
+}
+
+.suggester-step-index {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 113, 227, 0.1);
+  color: #0058b0;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .modal-actions {
   display: flex;
   gap: 0.6rem;
@@ -570,6 +784,211 @@ button {
   font-size: 1rem;
   font-weight: 500;
   padding: 0;
+}
+
+/* Pins list/gallery page — a dense, text-and-grid view, kept flat per the
+   design brief's "reach for glass only for floating chrome" rule (same
+   reasoning as .search-box, not .modal-card). Uses the theme-aware
+   --color-* variables throughout, unlike the glass surfaces above, since
+   nothing here sits on top of the always-light `overLight` glass look. */
+.pins-page {
+  min-height: 100vh;
+  padding: 3rem 2rem 4rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.pins-header {
+  margin-bottom: 1.75rem;
+}
+
+.pins-header h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0.5rem 0 0;
+  color: var(--color-text);
+}
+
+.back-link {
+  display: inline-block;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+.pins-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.pins-kind-filter {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.3rem;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-pill);
+}
+
+.pins-kind-btn {
+  background: none;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.pins-kind-btn:hover {
+  color: var(--color-text);
+}
+
+.pins-kind-btn.active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.pins-search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.pins-search-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
+}
+
+.pins-status,
+.pins-empty {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  padding: 2rem 0;
+  text-align: center;
+}
+
+.pins-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+
+.pin-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.pin-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+
+.pin-card:active {
+  transform: scale(0.98);
+}
+
+.pin-card-photo {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--color-bg-elevated);
+}
+
+.pin-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pin-card-body {
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+.pin-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.pin-card-top h3 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+
+.pin-kind-badge {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pin-kind-memory {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.pin-kind-wishlist {
+  background: rgba(255, 149, 0, 0.12);
+  color: #c76b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pin-kind-wishlist {
+    color: #ffb454;
+  }
+}
+
+.pin-card-note {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .loading-screen {

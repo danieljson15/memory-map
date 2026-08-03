@@ -1,11 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import LiquidGlass from "liquid-glass-react";
 import { supabase } from "@/lib/supabaseClient";
 import AuthScreen from "@/components/AuthScreen";
+import SuggesterModal from "@/components/SuggesterModal";
 
 // Leaflet touches `window` on import, so the map can only render client-side.
 const MapView = dynamic(() => import("@/components/MapView"), {
@@ -16,12 +18,25 @@ export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
+  const [showSuggester, setShowSuggester] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setCheckingSession(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+      })
+      .catch((err) => {
+        // The map is public-read now — there's no reason a failed session
+        // check should block anyone from seeing it. Treat it as "signed
+        // out" rather than hanging on the loading screen forever with no
+        // feedback (which is what happened before this .catch existed).
+        console.error("Failed to check auth session:", err);
+        setSession(null);
+      })
+      .finally(() => {
+        setCheckingSession(false);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
@@ -63,13 +78,24 @@ export default function Home() {
           <h1 className="brand">
             Memory <span className="brand-mark">Map</span>
           </h1>
+          <Link href="/pins" className="signout-btn">
+            All pins
+          </Link>
           {session ? (
-            <button
-              className="signout-btn"
-              onClick={() => supabase.auth.signOut()}
-            >
-              Sign out
-            </button>
+            <>
+              <button
+                className="suggest-trip-btn"
+                onClick={() => setShowSuggester(true)}
+              >
+                ✨ Suggest a trip
+              </button>
+              <button
+                className="signout-btn"
+                onClick={() => supabase.auth.signOut()}
+              >
+                Sign out
+              </button>
+            </>
           ) : (
             <button
               className="signout-btn"
@@ -86,6 +112,10 @@ export default function Home() {
           <MapView userId={session?.user.id} />
         </div>
       </main>
+
+      {showSuggester && session && (
+        <SuggesterModal onClose={() => setShowSuggester(false)} />
+      )}
     </div>
   );
 }
