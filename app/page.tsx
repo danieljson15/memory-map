@@ -1,15 +1,20 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import LiquidGlass from "liquid-glass-react";
 import { supabase } from "@/lib/supabaseClient";
 import AuthScreen from "@/components/AuthScreen";
 import SuggesterModal from "@/components/SuggesterModal";
+import NearbyRecommendationsModal from "@/components/NearbyRecommendationsModal";
+import AllPinsModal from "@/components/AllPinsModal";
 
-// Leaflet touches `window` on import, so the map can only render client-side.
+// ssr: false because MapView can render LeafletMapView (see
+// components/MapView.tsx and lib/usage.ts), and Leaflet touches `window`
+// at import time — it always crashed server-side prerendering, Google
+// Maps or not, which is why this was already dynamic before the Google
+// refactor.
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
 });
@@ -19,6 +24,20 @@ export default function Home() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [showSuggester, setShowSuggester] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [showNearbyRecommendations, setShowNearbyRecommendations] =
+    useState(false);
+  const [showAllPins, setShowAllPins] = useState(false);
+  const [mapCenter, setMapCenter] = useState({ lat: 50.5, lng: 10.5 });
+  const [pinsRefreshToken, setPinsRefreshToken] = useState(0);
+  // Seeded once from ?pin= on first load so an old /?pin=<id> link (or a
+  // freshly-selected pin from AllPinsModal) both focus the same way,
+  // through the same prop rather than MapView reading the URL itself.
+  const [focusPinId, setFocusPinId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("pin"),
+  );
 
   useEffect(() => {
     supabase.auth
@@ -50,6 +69,28 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!session) {
+      setIsOwner(false);
+      return;
+    }
+
+    async function checkOwnerAccess() {
+      try {
+        const { data, error } = await supabase.rpc("is_memory_map_owner");
+        if (!cancelled) setIsOwner(!error && data === true);
+      } catch {
+        if (!cancelled) setIsOwner(false);
+      }
+    }
+    void checkOwnerAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
   if (checkingSession) {
     return <div className="loading-screen">Loading Memory Map...</div>;
   }
@@ -78,16 +119,25 @@ export default function Home() {
           <h1 className="brand">
             Memory <span className="brand-mark">Map</span>
           </h1>
-          <Link href="/pins" className="signout-btn">
+          <button
+            className="signout-btn"
+            onClick={() => setShowAllPins(true)}
+          >
             All pins
-          </Link>
-          {session ? (
+          </button>
+          {session && isOwner ? (
             <>
               <button
-                className="suggest-trip-btn"
+                className="signout-btn"
                 onClick={() => setShowSuggester(true)}
               >
-                ✨ Suggest a trip
+                Suggest a trip
+              </button>
+              <button
+                className="signout-btn"
+                onClick={() => setShowNearbyRecommendations(true)}
+              >
+                Recommend nearby
               </button>
               <button
                 className="signout-btn"
@@ -96,12 +146,19 @@ export default function Home() {
                 Sign out
               </button>
             </>
-          ) : (
+          ) : !session ? (
             <button
               className="signout-btn"
               onClick={() => setShowAuth(true)}
             >
               Sign in
+            </button>
+          ) : (
+            <button
+              className="signout-btn"
+              onClick={() => supabase.auth.signOut()}
+            >
+              Sign out
             </button>
           )}
         </div>
@@ -109,12 +166,36 @@ export default function Home() {
 
       <main className="map-stage">
         <div className="map-frame">
-          <MapView userId={session?.user.id} />
+          <MapView
+            userId={isOwner ? session?.user.id : undefined}
+            refreshToken={pinsRefreshToken}
+            onCenterChange={setMapCenter}
+            focusPinId={focusPinId}
+          />
         </div>
       </main>
 
-      {showSuggester && session && (
-        <SuggesterModal onClose={() => setShowSuggester(false)} />
+      {showSuggester && session && isOwner && (
+        <SuggesterModal
+          center={mapCenter}
+          onClose={() => setShowSuggester(false)}
+        />
+      )}
+      {showNearbyRecommendations && session && isOwner && (
+        <NearbyRecommendationsModal
+          center={mapCenter}
+          onClose={() => setShowNearbyRecommendations(false)}
+          onSaved={() => setPinsRefreshToken((token) => token + 1)}
+        />
+      )}
+      {showAllPins && (
+        <AllPinsModal
+          onClose={() => setShowAllPins(false)}
+          onSelectPin={(pinId) => {
+            setFocusPinId(pinId);
+            setShowAllPins(false);
+          }}
+        />
       )}
     </div>
   );

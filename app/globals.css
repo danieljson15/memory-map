@@ -132,6 +132,7 @@ button {
   border-radius: var(--radius-pill);
   font-size: 0.85rem;
   font-weight: 500;
+  white-space: nowrap;
   transition:
     border-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
@@ -147,27 +148,6 @@ button {
   transform: scale(0.96);
 }
 
-.suggest-trip-btn {
-  background: var(--color-accent);
-  border: none;
-  color: #ffffff;
-  padding: 0.45rem 1rem;
-  border-radius: var(--radius-pill);
-  font-size: 0.85rem;
-  font-weight: 500;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
-}
-
-.suggest-trip-btn:hover {
-  background: var(--color-accent-hover);
-}
-
-.suggest-trip-btn:active {
-  transform: scale(0.96);
-}
-
 .map-stage {
   position: absolute;
   inset: 0;
@@ -177,6 +157,26 @@ button {
 .map-frame {
   height: 100%;
   width: 100%;
+}
+
+.google-map {
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-elevated);
+}
+
+.map-error {
+  position: absolute;
+  z-index: 10;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  max-width: 520px;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-danger);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
 }
 
 .hint-banner {
@@ -191,6 +191,20 @@ button {
   font-weight: 500;
   color: var(--color-text);
   animation: fade-in var(--duration-slow) var(--ease-standard) both;
+}
+
+/* Leaflet fallback map (see components/LeafletMapView.tsx) reuses the
+   hint-banner pill, but its usage-limit message is a full sentence, and
+   it can appear stacked above the "no pins yet" hint. */
+.map-fallback-banner {
+  max-width: min(90vw, 420px);
+  border-radius: var(--radius-md);
+  text-align: center;
+  white-space: normal;
+}
+
+.map-fallback-empty-banner {
+  top: 9.5rem;
 }
 
 /* Place search — a text input backed by a scrolling results list, which is
@@ -214,9 +228,7 @@ button {
   position: absolute;
   top: 1rem;
   left: 1rem;
-  /* Leaflet's internal panes (tile/marker/popup) go up to z-index 700 and
-     don't sit in an isolated stacking context, so this has to clear that
-     range explicitly rather than using the app's normal z-index scale. */
+  /* Clears Google Maps' internal controls and marker panes. */
   z-index: 900;
   width: 280px;
   max-width: calc(100% - 2rem);
@@ -245,14 +257,19 @@ button {
 
 .search-results {
   list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0.4rem;
+  margin: 0;
+  padding: 0.35rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.search-results-panel {
+  margin-top: 0.5rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
-  max-height: 280px;
-  overflow-y: auto;
+  overflow: hidden;
   animation: fade-in var(--duration-fast) var(--ease-standard) both;
 }
 
@@ -273,6 +290,46 @@ button {
 
 .search-results button:hover {
   background: var(--color-bg-elevated);
+}
+
+.search-results button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.place-result-main,
+.place-result-secondary {
+  display: block;
+}
+
+.place-result-main {
+  font-weight: 600;
+}
+
+.place-result-secondary {
+  margin-top: 0.15rem;
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+}
+
+.search-error,
+.search-empty {
+  margin: 0;
+  padding: 0.75rem 0.9rem 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+}
+
+.search-error {
+  color: var(--color-danger);
+}
+
+.google-attribution {
+  margin: 0;
+  padding: 0.35rem 0.75rem 0.55rem;
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+  text-align: right;
 }
 
 .theme-toggle-btn {
@@ -364,7 +421,8 @@ button {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--color-border);
@@ -379,7 +437,8 @@ button {
 }
 
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: 0 0 0 4px var(--color-accent-soft);
@@ -476,7 +535,8 @@ button {
 }
 
 .modal-card .field input,
-.modal-card .field textarea {
+.modal-card .field textarea,
+.modal-card .field select {
   background: rgba(255, 255, 255, 0.6);
   border-color: rgba(0, 0, 0, 0.15);
   color: #1d1d1f;
@@ -491,6 +551,23 @@ button {
   display: block !important;
   width: 380px !important;
   max-width: 100%;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  /* Plain white for now instead of the frosted glass effect — the
+     translucent surface was too hard to read against a busy map
+     background. Revisit once there's time to tune contrast instead of
+     dropping the effect outright. */
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  /* !important is required here, not decorative — the library sets its
+     own much heavier shadow (0px 16px 70px rgba(0,0,0,0.75) — see
+     liquid-glass-react's GlassContainer) via an inline style attribute,
+     which otherwise wins over this rule regardless of source order. That
+     heavy shadow is tuned for a fully transparent surface floating over
+     a busy scene; against an opaque card it reads as a dark smudge
+     bleeding out from the rounded corners rather than a normal shadow. */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25) !important;
 }
 
 .modal-card h2 {
@@ -498,6 +575,24 @@ button {
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0 0 1rem;
+}
+
+.selected-place-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 113, 227, 0.08);
+  color: #6e6e73;
+  font-size: 0.78rem;
+}
+
+.selected-place-summary span {
+  color: #1d1d1f;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 /* Suggester modal — same floating-glass-over-dimmed-map treatment as
@@ -529,6 +624,12 @@ button {
   display: block !important;
   width: 440px !important;
   max-width: 100%;
+  /* Missing on this card (unlike .modal-card / .recommendations-card
+     .glass, which both already had this) — without it, a verbose
+     response just grows the card past the viewport instead of
+     scrolling internally. */
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   /* The library's glass look is pure backdrop-blur with no background
      color of its own (see "Liquid glass specifics" in CLAUDE.md) — it
      reads as "frosted" mainly because it's usually sampling a light map.
@@ -539,6 +640,10 @@ button {
      inline-style-precedence reason documented above) keeps the glass
      edge/blur but gives body text real contrast to sit on. */
   background-color: rgba(255, 255, 255, 0.88) !important;
+  /* Same inline-style-precedence override as .modal-card .glass above —
+     the library's own heavy corner shadow needs !important to actually
+     be replaced, not just source-order priority. */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25) !important;
 }
 
 .suggester-card h2 {
@@ -572,11 +677,24 @@ button {
   animation: pulse 1.6s var(--ease-standard) infinite;
 }
 
+.cost-breakdown-wrap {
+  margin: 0 0 1rem;
+}
+
+.cost-breakdown-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6e6e73;
+}
+
 .cost-breakdown {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  margin: 0 0 1rem;
+  margin: 0;
   padding: 0.9rem 1rem;
   background: rgba(255, 255, 255, 0.5);
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -629,6 +747,22 @@ button {
 .candidate-row.candidate-chosen {
   font-weight: 600;
   color: #1d1d1f;
+}
+
+.candidates-constraints {
+  margin: -0.25rem 0 0.5rem;
+  font-size: 0.72rem;
+  color: #6e6e73;
+}
+
+.candidate-tag {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 113, 227, 0.1);
+  color: #0058b0;
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 .candidate-similarity {
@@ -717,46 +851,7 @@ button {
   margin-top: 0;
 }
 
-/* Pin detail popup inside Leaflet — floats over the map, so it gets glass.
-   Leaflet's popup chrome (.leaflet-popup-content-wrapper/-tip) is Leaflet's
-   own DOM, built and positioned outside React's tree, so it can't be
-   wrapped in the actual `liquid-glass-react` component the way the topbar/
-   modal are (that component's Fragment output and self-centering transform
-   assume it controls its own placement — see "Liquid glass specifics" in
-   CLAUDE.md, and the reverted search-box attempt above for what happens
-   when that assumption doesn't hold). This is a hand-tuned CSS
-   approximation instead, using the same fixed (non-theme-swapping) light
-   frosted look as `.modal-card`/the topbar's `overLight` glass — the
-   original version used the theme-swapping `--glass-*`/`--color-text`
-   variables, which in dark-mode OSes rendered as a plain dark-gray box
-   with no visible frost/refraction, quite unlike the other glass
-   surfaces. */
-.leaflet-popup-content-wrapper {
-  background: rgba(255, 255, 255, 0.72);
-  color: #1d1d1f;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: var(--radius-lg);
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  backdrop-filter: blur(24px) saturate(190%);
-}
-
-.leaflet-popup-tip {
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: none;
-}
-
-.leaflet-popup-content {
-  margin: 1.5rem 1.75rem;
-}
-
-.leaflet-container {
-  font-family: var(--font-sans);
-  background: var(--color-bg-elevated);
-}
-
+/* Pin details are built as DOM content inside Google Maps InfoWindow. */
 .pin-popup h3 {
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -773,32 +868,317 @@ button {
 
 .pin-popup img {
   width: 100%;
+  height: 160px;
+  object-fit: cover;
   border-radius: var(--radius-sm);
   margin-bottom: 0.85rem;
 }
 
 .pin-popup .delete-link {
+  display: block;
   background: none;
   border: none;
   color: #d70015;
   font-size: 1rem;
   font-weight: 500;
   padding: 0;
+  margin-top: 0.4rem;
 }
 
-/* Pins list/gallery page — a dense, text-and-grid view, kept flat per the
+.pin-popup-meta {
+  color: #6e6e73 !important;
+  font-size: 0.82rem !important;
+  margin-bottom: 0.35rem !important;
+}
+
+.pin-popup-maps-link {
+  display: block;
+  color: var(--color-accent);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  margin-bottom: 0.6rem;
+}
+
+.pin-popup-maps-link:hover {
+  text-decoration: underline;
+}
+
+.gm-style .gm-style-iw-c {
+  border-radius: var(--radius-lg);
+  padding: 0;
+}
+
+.gm-style .gm-style-iw-d {
+  overflow: auto !important;
+  padding: 1.25rem 1.4rem;
+}
+
+/* Google's default InfoWindow close button turned out to still be
+   invisible after the position/visibility fix — its icon color appears
+   to follow the map's colorScheme (light/dark) rather than reliably
+   contrasting against this popup's fixed white background, and that
+   icon isn't something we can safely re-color from here since it's
+   Google's own internal, undocumented markup. Hiding it and building an
+   explicit close button into the popup content itself (.pin-popup-close
+   below) sidesteps that entirely — full control, no dependency on
+   Google's internal DOM. */
+.gm-style-iw button.gm-ui-hover-effect {
+  display: none !important;
+}
+
+.google-pin-popup {
+  min-width: 250px;
+  max-width: 360px;
+  color: #1d1d1f;
+  position: relative;
+}
+
+.pin-popup-close {
+  position: absolute;
+  top: -0.2rem;
+  right: -0.2rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: none;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 50%;
+  color: #3a3a3d;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pin-popup-close:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* Live nearby recommendations — Google data stays in this attributed list;
+   only places explicitly saved by an owner become durable wishlist pins. */
+.recommendations-card {
+  color: #1d1d1f;
+  animation: modal-pop-in var(--duration-slow) var(--ease-spring) both;
+}
+
+.recommendations-card .glass {
+  display: block !important;
+  width: 680px !important;
+  max-width: 100%;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  /* Same inline-style-precedence override as .modal-card .glass above. */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25) !important;
+}
+
+.recommendations-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.recommendations-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.recommendations-header p {
+  margin: 0.25rem 0 0;
+  color: #6e6e73;
+  font-size: 0.85rem;
+}
+
+.icon-close-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+  color: #3a3a3d;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.recommendations-controls {
+  display: grid;
+  /* radius label + select, budget label + select; the button gets its own row */
+  grid-template-columns: auto 110px auto 1fr;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 1.2rem 0 1rem;
+}
+
+.recommendations-controls label {
+  color: #6e6e73;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.recommendations-controls select {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.8);
+  color: #1d1d1f;
+}
+
+.recommendations-controls .primary-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+  width: auto;
+  margin: 0;
+  padding-inline: 1.2rem;
+}
+
+.recommendations-empty {
+  margin: 1.4rem 0 0.5rem;
+  padding: 1.25rem;
+  border: 1px dashed rgba(0, 0, 0, 0.16);
+  border-radius: var(--radius-md);
+  color: #6e6e73;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.recommendation-error {
+  margin: 0.75rem 0;
+}
+
+.recommendations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.recommendation-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.recommendation-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.recommendation-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.recommendation-title-row h3 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.recommendation-title-row > span {
+  flex-shrink: 0;
+  color: #0071e3;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.recommendation-address,
+.recommendation-reason {
+  margin: 0.2rem 0 0;
+  color: #6e6e73;
+  font-size: 0.78rem;
+}
+
+.recommendation-reason {
+  color: #3a3a3d;
+}
+
+.recommendation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.4rem;
+  color: #6e6e73;
+  font-size: 0.72rem;
+}
+
+.recommendation-meta a {
+  color: #0071e3;
+}
+
+.save-place-btn {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: 0.45rem 0.8rem;
+  background: #0071e3;
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.save-place-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.recommendations-attribution {
+  padding-right: 0;
+}
+
+@media (max-width: 760px) {
+  .topbar-inner {
+    gap: 0.55rem;
+  }
+
+  .brand {
+    display: none;
+  }
+
+  .signout-btn {
+    padding-inline: 0.7rem;
+    font-size: 0.74rem;
+  }
+
+  .recommendations-controls {
+    grid-template-columns: auto 1fr;
+  }
+
+  .recommendation-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* "All pins" modal — a dense, text-and-grid view, kept flat per the
    design brief's "reach for glass only for floating chrome" rule (same
    reasoning as .search-box, not .modal-card). Uses the theme-aware
    --color-* variables throughout, unlike the glass surfaces above, since
-   nothing here sits on top of the always-light `overLight` glass look. */
-.pins-page {
-  min-height: 100vh;
-  padding: 3rem 2rem 4rem;
-  max-width: 1100px;
-  margin: 0 auto;
+   nothing here sits on top of the always-light `overLight` glass look.
+   Was a standalone /pins route; now a modal reusing .modal-backdrop so
+   the already-loaded map blurs behind it instead of loading a second
+   map just for a decorative backdrop. */
+.all-pins-card {
+  width: 100%;
+  max-width: 900px;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: modal-pop-in var(--duration-slow) var(--ease-spring) both;
 }
 
 .pins-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1.75rem;
 }
 
@@ -806,20 +1186,8 @@ button {
   font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: -0.01em;
-  margin: 0.5rem 0 0;
+  margin: 0;
   color: var(--color-text);
-}
-
-.back-link {
-  display: inline-block;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-.back-link:hover {
-  text-decoration: underline;
 }
 
 .pins-filters {
@@ -989,6 +1357,12 @@ button {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.pin-card-meta {
+  margin: 0.6rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.73rem;
 }
 
 .loading-screen {

@@ -44,8 +44,8 @@ export default function AuthScreen() {
         <h1>Memory Map</h1>
         <p className="sub">
           {mode === "sign-in"
-            ? "Sign in to see your pins."
-            : "Create an account to start pinning memories."}
+            ? "Sign in with an owner account to add and manage pins."
+            : "Create one of the owner accounts configured for this map."}
         </p>
 
         <form onSubmit={handleSubmit}>

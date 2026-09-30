@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from "react";
 import LiquidGlass from "liquid-glass-react";
+import { PRICE_TIER_LABELS, type PriceTier } from "@/lib/budget";
 import type {
+  AppliedConstraints,
   RankedWishlistPin,
   Suggestion,
   SuggestionStep,
 } from "@/shared/api-types";
 
 interface SuggesterModalProps {
+  // Current map center, used as the anchor for the optional location filter.
+  center: { lat: number; lng: number };
   onClose: () => void;
 }
 
@@ -16,12 +20,15 @@ type ViewState = "form" | "loading" | "result" | "error";
 
 const STEP_REVEAL_DELAY_MS = 550;
 
-export default function SuggesterModal({ onClose }: SuggesterModalProps) {
+export default function SuggesterModal({ center, onClose }: SuggesterModalProps) {
   const [view, setView] = useState<ViewState>("form");
   const [budget, setBudget] = useState("");
   const [departureAirport, setDepartureAirport] = useState("");
   const [travelMonth, setTravelMonth] = useState("");
   const [nights, setNights] = useState("");
+  const [mood, setMood] = useState("");
+  const [radiusKm, setRadiusKm] = useState("");
+  const [applied, setApplied] = useState<AppliedConstraints | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [steps, setSteps] = useState<SuggestionStep[]>([]);
@@ -53,6 +60,9 @@ export default function SuggesterModal({ onClose }: SuggesterModalProps) {
           departure_airport: departureAirport.trim(),
           travel_month: travelMonth.trim(),
           nights: Number(nights),
+          mood: mood.trim() || undefined,
+          center: radiusKm ? center : undefined,
+          radius_km: radiusKm ? Number(radiusKm) : undefined,
         }),
       });
 
@@ -65,6 +75,7 @@ export default function SuggesterModal({ onClose }: SuggesterModalProps) {
       setSuggestion(data.suggestion as Suggestion);
       setSteps((data.steps as SuggestionStep[]) || []);
       setCandidates((data.candidates as RankedWishlistPin[]) || []);
+      setApplied((data.applied as AppliedConstraints) ?? null);
       setVisibleStepCount(0);
       setView("result");
     } catch (err) {
@@ -80,6 +91,7 @@ export default function SuggesterModal({ onClose }: SuggesterModalProps) {
     setSuggestion(null);
     setSteps([]);
     setCandidates([]);
+    setApplied(null);
     setVisibleStepCount(0);
     setError(null);
   }
@@ -159,6 +171,32 @@ export default function SuggesterModal({ onClose }: SuggesterModalProps) {
               />
             </div>
 
+            <div className="field">
+              <label htmlFor="mood">In the mood for (optional)</label>
+              <input
+                id="mood"
+                type="text"
+                maxLength={200}
+                value={mood}
+                onChange={(e) => setMood(e.target.value)}
+                placeholder="e.g. quiet coastal seafood"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="radius">Where (optional)</label>
+              <select
+                id="radius"
+                value={radiusKm}
+                onChange={(e) => setRadiusKm(e.target.value)}
+              >
+                <option value="">Anywhere</option>
+                <option value="500">Within 500 km of the map view</option>
+                <option value="1500">Within 1,500 km of the map view</option>
+                <option value="3000">Within 3,000 km of the map view</option>
+              </select>
+            </div>
+
             <div className="modal-actions">
               <button type="button" className="ghost-btn" onClick={onClose}>
                 Cancel
@@ -209,7 +247,17 @@ export default function SuggesterModal({ onClose }: SuggesterModalProps) {
               <div className="candidates-list">
                 <p className="candidates-label">
                   Ranked by similarity to your travel history
+                  {applied?.keyword ? " + your mood" : ""}
                 </p>
+                {applied && (
+                  <p className="candidates-constraints">
+                    Price up to {"€".repeat(applied.max_price_tier)}
+                    {" ("}
+                    {PRICE_TIER_LABELS[applied.max_price_tier as PriceTier]}
+                    {")"}
+                    {applied.radius_km ? ` · within ${applied.radius_km.toLocaleString()} km` : ""}
+                  </p>
+                )}
                 {candidates.map((c) => {
                   const isChosen =
                     c.title.toLowerCase() ===
@@ -223,7 +271,17 @@ export default function SuggesterModal({ onClose }: SuggesterModalProps) {
                           : "candidate-row"
                       }
                     >
-                      <span>{c.title}</span>
+                      <span>
+                        {c.title}
+                        {c.keyword_match && (
+                          <span className="candidate-tag">mood match</span>
+                        )}
+                        {c.price_tier ? (
+                          <span className="candidate-tag">
+                            {"€".repeat(c.price_tier)}
+                          </span>
+                        ) : null}
+                      </span>
                       <span className="candidate-similarity">
                         {Math.round(c.similarity * 100)}% match
                       </span>
@@ -234,26 +292,31 @@ export default function SuggesterModal({ onClose }: SuggesterModalProps) {
             )}
 
             {suggestion.cost_breakdown && (
-              <div className="cost-breakdown">
-                <div>
-                  <span>Flights</span>
-                  <span>€{suggestion.cost_breakdown.flights}</span>
-                </div>
-                <div>
-                  <span>Lodging</span>
-                  <span>€{suggestion.cost_breakdown.lodging}</span>
-                </div>
-                <div>
-                  <span>Food</span>
-                  <span>€{suggestion.cost_breakdown.food}</span>
-                </div>
-                <div>
-                  <span>Activities</span>
-                  <span>€{suggestion.cost_breakdown.activities}</span>
-                </div>
-                <div className="cost-total">
-                  <span>Total</span>
-                  <span>€{suggestion.total_cost}</span>
+              <div className="cost-breakdown-wrap">
+                <p className="cost-breakdown-label">
+                  Estimated costs — not live flight or hotel prices
+                </p>
+                <div className="cost-breakdown">
+                  <div>
+                    <span>Flights</span>
+                    <span>€{suggestion.cost_breakdown.flights}</span>
+                  </div>
+                  <div>
+                    <span>Lodging</span>
+                    <span>€{suggestion.cost_breakdown.lodging}</span>
+                  </div>
+                  <div>
+                    <span>Food</span>
+                    <span>€{suggestion.cost_breakdown.food}</span>
+                  </div>
+                  <div>
+                    <span>Activities</span>
+                    <span>€{suggestion.cost_breakdown.activities}</span>
+                  </div>
+                  <div className="cost-total">
+                    <span>Total</span>
+                    <span>€{suggestion.total_cost}</span>
+                  </div>
                 </div>
               </div>
             )}

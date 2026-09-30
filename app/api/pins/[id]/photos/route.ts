@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getOwnerAccess } from "@/lib/api-auth";
 import type { RegisterPhotoInput } from "@/shared/api-types";
 
 interface RouteParams {
@@ -14,13 +15,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   const { id: pinId } = await params;
   const supabase = await createSupabaseServerClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  const access = await getOwnerAccess(supabase);
+  if (!access.user) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
   }
+  const user = access.user;
 
   const body = (await request.json()) as RegisterPhotoInput;
 
