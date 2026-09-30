@@ -5,15 +5,22 @@ import LiquidGlass from "liquid-glass-react";
 import { supabase } from "@/lib/supabaseClient";
 import type { Pin } from "@/lib/types";
 import { PRICE_TIER_LABELS, type PriceTier } from "@/lib/budget";
-import type { PinKind, PlaceDetails } from "@/shared/api-types";
+import type { PinKind, PinWithPhotos, PlaceDetails } from "@/shared/api-types";
 
 interface PinModalProps {
   lat: number;
   lng: number;
   userId: string;
   place?: PlaceDetails;
+  // When set, the modal edits this existing pin (PATCH) instead of
+  // creating a new one (POST) — same form, same fields, different verb
+  // and a prefilled starting state.
+  pin?: PinWithPhotos;
   onClose: () => void;
-  onCreated: (pin: Pin, photoUrl?: string) => void;
+  // photoUrl: a new URL if a photo was added/replaced, null if the
+  // existing photo was removed, undefined if the photo wasn't touched
+  // at all (including every case in create mode without a photo).
+  onSaved: (pin: Pin, photoUrl?: string | null) => void;
 }
 
 export default function PinModal({
@@ -21,18 +28,30 @@ export default function PinModal({
   lng,
   userId,
   place,
+  pin,
   onClose,
-  onCreated,
+  onSaved,
 }: PinModalProps) {
+  const isEditing = !!pin;
   // Canonical Google selections prefill the name, but the saved title remains
   // editable user content. Manual map clicks start with an empty title.
-  const [title, setTitle] = useState(place?.name ?? "");
-  const [note, setNote] = useState("");
-  const [kind, setKind] = useState<PinKind>("memory");
-  const [rating, setRating] = useState("");
-  const [priceTier, setPriceTier] = useState("");
-  const [tags, setTags] = useState("");
+  const [title, setTitle] = useState(pin?.title ?? place?.name ?? "");
+  const [note, setNote] = useState(pin?.note ?? "");
+  const [kind, setKind] = useState<PinKind>(pin?.kind ?? "memory");
+  const [rating, setRating] = useState(
+    pin?.user_rating ? String(pin.user_rating) : "",
+  );
+  const [priceTier, setPriceTier] = useState(
+    pin?.price_tier ? String(pin.price_tier) : "",
+  );
+  const [tags, setTags] = useState(pin?.tags.join(", ") ?? "");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const existingPhoto = pin?.photos[0];
+  const existingPhotoUrl = existingPhoto
+    ? supabase.storage.from("photos").getPublicUrl(existingPhoto.storage_path)
+        .data.publicUrl
+    : undefined;
+  const [removeExistingPhoto, setRemoveExistingPhoto] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +74,98 @@ export default function PinModal({
 
     setSaving(true);
 
+    try {
+      if (isEditing) {
+        await handleSaveEdit();
+      } else {
+        await handleSaveCreate();
+      }
+    } catch (err) {
+      const messageText =
+        err instanceof Error ? err.message : "Something went wrong.";
+      setError(messageText);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveEdit() {
+    const existingPin = pin!;
+
+    const patchResponse = await fetch(`/api/pins/${existingPin.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind,
+        title: title.trim(),
+        note: note.trim() || null,
+        user_rating: rating ? Number(rating) : null,
+        price_tier: priceTier ? Number(priceTier) : null,
+        tags: tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      }),
+    });
+    const patchResult = await patchResponse.json();
+    if (!patchResponse.ok) {
+      throw new Error(patchResult.error || "Failed to update pin");
+    }
+    const updatedPin = patchResult.pin as Pin;
+
+    // Photo: add/replace, remove, or leave untouched — the three cases
+    // the form supports (see onSaved's photoUrl contract above).
+    let photoUrl: string | null | undefined;
+    if (photoFile) {
+      const fileExt = photoFile.name.split(".").pop()?.toLowerCase() || "jpg";
+      const safeExtension = /^[a-z0-9]{2,5}$/.test(fileExt) ? fileExt : "jpg";
+      const filePath = `${userId}/${crypto.randomUUID()}.${safeExtension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("photos")
+        .upload(filePath, photoFile);
+      if (uploadError) throw uploadError;
+
+      const registerResponse = await fetch(
+        `/api/pins/${existingPin.id}/photos`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storage_path: filePath }),
+        },
+      );
+      const registerResult = await registerResponse.json();
+      if (!registerResponse.ok) {
+        await supabase.storage.from("photos").remove([filePath]);
+        throw new Error(registerResult.error || "Failed to attach photo");
+      }
+      photoUrl = supabase.storage.from("photos").getPublicUrl(filePath).data
+        .publicUrl;
+
+      // Only drop the old photo once the new one is safely registered,
+      // so a failure above never leaves the pin with zero photos.
+      if (existingPhoto) {
+        await fetch(`/api/pins/${existingPin.id}/photos/${existingPhoto.id}`, {
+          method: "DELETE",
+        });
+      }
+    } else if (removeExistingPhoto && existingPhoto) {
+      const deleteResponse = await fetch(
+        `/api/pins/${existingPin.id}/photos/${existingPhoto.id}`,
+        { method: "DELETE" },
+      );
+      if (!deleteResponse.ok) {
+        const deleteResult = await deleteResponse.json();
+        throw new Error(deleteResult.error || "Failed to remove photo");
+      }
+      photoUrl = null;
+    }
+
+    onSaved(updatedPin, photoUrl);
+    onClose();
+  }
+
+  async function handleSaveCreate() {
     let photoPath: string | null = null;
     let photoUrl: string | undefined;
     let createdPinId: string | null = null;
@@ -114,7 +225,7 @@ export default function PinModal({
         }
       }
 
-      onCreated(createdPin, photoUrl);
+      onSaved(createdPin, photoUrl);
       onClose();
     } catch (err) {
       // Compensate for a partially completed create so retrying the form
@@ -125,11 +236,7 @@ export default function PinModal({
       if (photoPath) {
         await supabase.storage.from("photos").remove([photoPath]);
       }
-      const messageText =
-        err instanceof Error ? err.message : "Something went wrong.";
-      setError(messageText);
-    } finally {
-      setSaving(false);
+      throw err;
     }
   }
 
@@ -148,7 +255,7 @@ export default function PinModal({
         aberrationIntensity={1}
         overLight
       >
-        <h2>New pin</h2>
+        <h2>{isEditing ? "Edit pin" : "New pin"}</h2>
 
         <form onSubmit={handleSave}>
           {place && (
@@ -237,11 +344,27 @@ export default function PinModal({
 
           <div className="field">
             <label htmlFor="photo">Photo (optional)</label>
+            {existingPhotoUrl && !removeExistingPhoto && !photoFile && (
+              <div className="pin-photo-current">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={existingPhotoUrl} alt="" />
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => setRemoveExistingPhoto(true)}
+                >
+                  Remove photo
+                </button>
+              </div>
+            )}
             <input
               id="photo"
               type="file"
               accept="image/*"
-              onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                setPhotoFile(e.target.files?.[0] ?? null);
+                setRemoveExistingPhoto(false);
+              }}
             />
           </div>
 
@@ -257,7 +380,7 @@ export default function PinModal({
               Cancel
             </button>
             <button className="primary-btn" type="submit" disabled={saving}>
-              {saving ? "Saving..." : "Save pin"}
+              {saving ? "Saving..." : isEditing ? "Save changes" : "Save pin"}
             </button>
           </div>
         </form>

@@ -52,6 +52,7 @@ export interface CreatePinInput {
 }
 
 export interface UpdatePinInput {
+  kind?: PinKind;
   title?: string;
   note?: string;
   user_rating?: number | null;

@@ -449,6 +449,20 @@ button {
   min-height: 70px;
 }
 
+.pin-photo-current {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.pin-photo-current img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
 .primary-btn {
   width: 100%;
   background: var(--color-accent);
@@ -893,15 +907,28 @@ button {
   margin-bottom: 0.85rem;
 }
 
+.pin-popup-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.4rem;
+}
+
+.pin-popup .edit-link,
 .pin-popup .delete-link {
   display: block;
   background: none;
   border: none;
-  color: #d70015;
   font-size: 1rem;
   font-weight: 500;
   padding: 0;
-  margin-top: 0.4rem;
+}
+
+.pin-popup .edit-link {
+  color: #0071e3;
+}
+
+.pin-popup .delete-link {
+  color: #d70015;
 }
 
 .pin-popup-meta {

@@ -53,7 +53,16 @@ block a bad push to main before it deploys.
 - `components/PinModal.tsx` uploads optional photos directly to the public-read
   `photos` bucket, but creates pins and registers photo metadata through API
   routes. Pin creation must continue to go through `/api/pins` so embedding is
-  not bypassed.
+  not bypassed. The same component also edits an existing pin when given a
+  `pin` prop (PATCH instead of POST, prefilled from the pin, "Save changes"
+  instead of "Save pin") — triggered from the "Edit" button next to "Delete"
+  in each map's pin popup (`GoogleMapView.tsx` / `LeafletMapView.tsx`).
+  Replacing or removing the one photo a pin can have goes through
+  `DELETE /api/pins/[id]/photos/[photoId]` (added for this; there was
+  previously no way to remove a `pin_photos` row at all) — a replacement
+  uploads and registers the new photo first, only deleting the old one once
+  that succeeds, so a failure partway through never leaves the pin with zero
+  photos.
 - `components/NearbyRecommendationsModal.tsx` asks the server for live nearby
   candidates and saves explicit selections as wishlist pins. Browsing is
   public; saving is owner-only — the `isOwner` prop (passed from

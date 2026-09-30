@@ -117,6 +117,7 @@ export default function LeafletMapView({
   const [pendingCoords, setPendingCoords] = useState<
     { lat: number; lng: number } | null
   >(null);
+  const [editingPin, setEditingPin] = useState<PinWithPhotos | null>(null);
   const [photoOverrides, setPhotoOverrides] = useState<Record<string, string>>(
     {},
   );
@@ -258,23 +259,32 @@ export default function LeafletMapView({
                   </a>
                 )}
                 {userId && (
-                  <button
-                    type="button"
-                    className="delete-link"
-                    onClick={async () => {
-                      if (!window.confirm(`Delete "${pin.title}"?`)) return;
-                      const response = await fetch(`/api/pins/${pin.id}`, {
-                        method: "DELETE",
-                      });
-                      if (response.ok) {
-                        setPins((current) =>
-                          current.filter((item) => item.id !== pin.id),
-                        );
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
+                  <div className="pin-popup-actions">
+                    <button
+                      type="button"
+                      className="edit-link"
+                      onClick={() => setEditingPin(pin)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="delete-link"
+                      onClick={async () => {
+                        if (!window.confirm(`Delete "${pin.title}"?`)) return;
+                        const response = await fetch(`/api/pins/${pin.id}`, {
+                          method: "DELETE",
+                        });
+                        if (response.ok) {
+                          setPins((current) =>
+                            current.filter((item) => item.id !== pin.id),
+                          );
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </div>
             </Popup>
@@ -288,12 +298,43 @@ export default function LeafletMapView({
           lng={pendingCoords.lng}
           userId={userId}
           onClose={() => setPendingCoords(null)}
-          onCreated={(newPin: Pin, photoUrl) => {
+          onSaved={(newPin: Pin, photoUrl) => {
             setPins((current) => [{ ...newPin, photos: [] }, ...current]);
             if (photoUrl) {
               setPhotoOverrides((current) => ({
                 ...current,
                 [newPin.id]: photoUrl,
+              }));
+            }
+          }}
+        />
+      )}
+
+      {editingPin && userId && (
+        <PinModal
+          lat={editingPin.lat}
+          lng={editingPin.lng}
+          userId={userId}
+          pin={editingPin}
+          onClose={() => setEditingPin(null)}
+          onSaved={(updatedPin: Pin, photoUrl) => {
+            setPins((current) =>
+              current.map((item) =>
+                item.id === updatedPin.id
+                  ? { ...updatedPin, photos: photoUrl === null ? [] : item.photos }
+                  : item,
+              ),
+            );
+            if (photoUrl === null) {
+              setPhotoOverrides((current) => {
+                const next = { ...current };
+                delete next[updatedPin.id];
+                return next;
+              });
+            } else if (photoUrl) {
+              setPhotoOverrides((current) => ({
+                ...current,
+                [updatedPin.id]: photoUrl,
               }));
             }
           }}

@@ -43,6 +43,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     string | string[] | number | number[] | null
   > = {};
 
+  if (body.kind !== undefined) {
+    if (body.kind !== "memory" && body.kind !== "wishlist") {
+      return NextResponse.json(
+        { error: "kind must be 'memory' or 'wishlist'" },
+        { status: 400 },
+      );
+    }
+    updates.kind = body.kind;
+  }
   if (body.title !== undefined) {
     if (!body.title.trim()) {
       return NextResponse.json(

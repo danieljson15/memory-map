@@ -71,6 +71,7 @@ export default function GoogleMapView({
     lng: number;
     place?: PlaceDetails;
   } | null>(null);
+  const [editingPin, setEditingPin] = useState<PinWithPhotos | null>(null);
   const [loadingPins, setLoadingPins] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -304,6 +305,18 @@ export default function GoogleMapView({
             popup.appendChild(mapsLink);
           }
           if (userId) {
+            const actions = document.createElement("div");
+            actions.className = "pin-popup-actions";
+
+            const editButton = document.createElement("button");
+            editButton.className = "edit-link";
+            editButton.textContent = "Edit";
+            editButton.addEventListener("click", () => {
+              activeInfoWindow.close();
+              setEditingPin(pin);
+            });
+            actions.appendChild(editButton);
+
             const deleteButton = document.createElement("button");
             deleteButton.className = "delete-link";
             deleteButton.textContent = "Delete";
@@ -318,7 +331,9 @@ export default function GoogleMapView({
                 setPins((current) => current.filter((item) => item.id !== pin.id));
               }
             });
-            popup.appendChild(deleteButton);
+            actions.appendChild(deleteButton);
+
+            popup.appendChild(actions);
           }
 
           activeInfoWindow.setContent(popup);
@@ -418,7 +433,7 @@ export default function GoogleMapView({
           userId={userId}
           place={pendingPin.place}
           onClose={() => setPendingPin(null)}
-          onCreated={(newPin: Pin, photoUrl) => {
+          onSaved={(newPin: Pin, photoUrl) => {
             setPins((current) => [
               { ...newPin, photos: [] },
               ...current,
@@ -427,6 +442,45 @@ export default function GoogleMapView({
               setPhotoOverrides((current) => ({
                 ...current,
                 [newPin.id]: photoUrl,
+              }));
+            }
+          }}
+        />
+      )}
+
+      {editingPin && userId && (
+        <PinModal
+          lat={editingPin.lat}
+          lng={editingPin.lng}
+          userId={userId}
+          pin={editingPin}
+          onClose={() => setEditingPin(null)}
+          onSaved={(updatedPin: Pin, photoUrl) => {
+            setPins((current) =>
+              current.map((item) =>
+                item.id === updatedPin.id
+                  ? {
+                      ...updatedPin,
+                      // Stale otherwise: a removed photo's row is gone
+                      // server-side, but this client-side array still
+                      // held the old entry, and clearing only the
+                      // override would fall through to it via
+                      // publicPhotoUrl's pin.photos[0] fallback.
+                      photos: photoUrl === null ? [] : item.photos,
+                    }
+                  : item,
+              ),
+            );
+            if (photoUrl === null) {
+              setPhotoOverrides((current) => {
+                const next = { ...current };
+                delete next[updatedPin.id];
+                return next;
+              });
+            } else if (photoUrl) {
+              setPhotoOverrides((current) => ({
+                ...current,
+                [updatedPin.id]: photoUrl,
               }));
             }
           }}
