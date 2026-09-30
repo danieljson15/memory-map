@@ -40,7 +40,7 @@ async function main() {
 
   const { data: pins, error } = await supabase
     .from("pins")
-    .select("id, title, note")
+    .select("id, title, note, tags")
     .is("embedding", null);
 
   if (error) {
@@ -59,8 +59,8 @@ async function main() {
 
   for (const pin of pins) {
     try {
-      const text = pinTextForEmbedding(pin.title, pin.note);
-      const embedding = await getEmbedding(text, "document");
+      const text = pinTextForEmbedding(pin.title, pin.note, pin.tags ?? []);
+      const embedding = await getEmbedding(supabase, text, "document");
 
       const { error: updateError } = await supabase
         .from("pins")
