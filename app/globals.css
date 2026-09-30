@@ -512,16 +512,8 @@ button {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  /* A light scrim (tried at 0.25) still let the map's own color/contrast
-     show through as a "busy" surround — readable once you know why, but
-     it reads as a bug at a glance. All Pins avoids this entirely just by
-     being big enough to leave barely any backdrop visible; matching that
-     look for the narrower floating cards (PinModal, SuggesterModal,
-     NearbyRecommendationsModal) means going most of the way to opaque
-     here instead, so the map barely registers regardless of card size. */
-  background: rgba(0, 0, 0, 0.88);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -576,6 +568,25 @@ button {
      a busy scene; against an opaque card it reads as a dark smudge
      bleeding out from the rounded corners rather than a normal shadow. */
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* The box-shadow override above wasn't the whole story. liquid-glass-react
+   renders a second element inside .glass — a <span class="glass__warp">,
+   absolutely positioned to cover the whole card — carrying its own
+   hardcoded backdrop-filter: blur(...) saturate(140%) plus the SVG
+   displacement/chromatic-aberration filter, independent of .glass's own
+   background/backdrop-filter above. "glass__warp" doesn't match the
+   .glass selector (distinct class, not a descendant), so none of the
+   overrides above ever reached it — it kept sampling and blurring
+   whatever's behind the card (the dimmed map) and compositing that as a
+   semi-visible layer inside an otherwise-opaque white card, which is what
+   actually produced the smudged corners, not the box-shadow. Since the
+   card is deliberately opaque (see the comment above), this layer has no
+   job left to do. */
+.modal-card .glass__warp,
+.suggester-card .glass__warp,
+.recommendations-card .glass__warp {
+  display: none !important;
 }
 
 .modal-card h2 {
