@@ -125,40 +125,31 @@ export default function Home() {
           >
             All pins
           </button>
-          {session && isOwner ? (
-            <>
-              <button
-                className="signout-btn"
-                onClick={() => setShowSuggester(true)}
-              >
-                Suggest a trip
-              </button>
-              <button
-                className="signout-btn"
-                onClick={() => setShowNearbyRecommendations(true)}
-              >
-                Recommend nearby
-              </button>
-              <button
-                className="signout-btn"
-                onClick={() => supabase.auth.signOut()}
-              >
-                Sign out
-              </button>
-            </>
-          ) : !session ? (
-            <button
-              className="signout-btn"
-              onClick={() => setShowAuth(true)}
-            >
-              Sign in
-            </button>
-          ) : (
+          <button
+            className="signout-btn"
+            onClick={() => setShowSuggester(true)}
+          >
+            Suggest a trip
+          </button>
+          <button
+            className="signout-btn"
+            onClick={() => setShowNearbyRecommendations(true)}
+          >
+            Recommend nearby
+          </button>
+          {session ? (
             <button
               className="signout-btn"
               onClick={() => supabase.auth.signOut()}
             >
               Sign out
+            </button>
+          ) : (
+            <button
+              className="signout-btn"
+              onClick={() => setShowAuth(true)}
+            >
+              Sign in
             </button>
           )}
         </div>
@@ -175,15 +166,17 @@ export default function Home() {
         </div>
       </main>
 
-      {showSuggester && session && isOwner && (
+      {showSuggester && (
         <SuggesterModal
           center={mapCenter}
+          isOwner={!!session && isOwner}
           onClose={() => setShowSuggester(false)}
         />
       )}
-      {showNearbyRecommendations && session && isOwner && (
+      {showNearbyRecommendations && (
         <NearbyRecommendationsModal
           center={mapCenter}
+          isOwner={!!session && isOwner}
           onClose={() => setShowNearbyRecommendations(false)}
           onSaved={() => setPinsRefreshToken((token) => token + 1)}
         />

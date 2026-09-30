@@ -7,12 +7,18 @@ import type { NearbyRecommendation } from "@/shared/api-types";
 
 interface NearbyRecommendationsModalProps {
   center: { lat: number; lng: number };
+  // Browsing/searching is public; only saving a result as a pin is
+  // owner-only (writes remain owner-gated, see CLAUDE.md). Passed down
+  // rather than re-derived so the Save button can tell a signed-out
+  // visitor upfront instead of letting the save request 403.
+  isOwner: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
 
 export default function NearbyRecommendationsModal({
   center,
+  isOwner,
   onClose,
   onSaved,
 }: NearbyRecommendationsModalProps) {
@@ -191,14 +197,17 @@ export default function NearbyRecommendationsModal({
                   <button
                     type="button"
                     className="save-place-btn"
-                    disabled={saved || savingId !== null}
+                    disabled={!isOwner || saved || savingId !== null}
+                    title={isOwner ? undefined : "Sign in as an owner to save"}
                     onClick={() => void saveToWishlist(place)}
                   >
-                    {saved
-                      ? "Saved"
-                      : savingId === place.place_id
-                        ? "Saving…"
-                        : "Save"}
+                    {!isOwner
+                      ? "Sign in to save"
+                      : saved
+                        ? "Saved"
+                        : savingId === place.place_id
+                          ? "Saving…"
+                          : "Save"}
                   </button>
                 </article>
               );

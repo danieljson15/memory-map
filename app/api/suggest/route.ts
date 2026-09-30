@@ -1,7 +1,9 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getOwnerAccess } from "@/lib/api-auth";
 import { maxPriceTierForBudget } from "@/lib/budget";
+import { checkRateLimit, clientIdentifier } from "@/lib/rate-limit";
 import {
   BudgetExceededError,
   runSuggesterWithinBudget,
@@ -11,16 +13,37 @@ import type {
   AppliedConstraints,
   RankedWishlistPin,
   RunSuggesterInput,
+  Suggestion,
+  SuggestionStep,
 } from "@/shared/api-types";
 
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
 
+  // Public by design (unlike pin writes) — anyone can try the suggester.
+  // Owners get their run persisted to suggestion history as before;
+  // everyone else gets the same result computed live but never saved,
+  // per CLAUDE.md ("AI suggestion history remains private to owners"),
+  // and is rate-limited per-client since there's no auth gate to lean on.
   const access = await getOwnerAccess(supabase);
-  if (!access.user) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+  const isOwner = !!access.user;
+
+  if (!isOwner) {
+    const rateLimit = await checkRateLimit(
+      supabase,
+      "PUBLIC_SUGGEST",
+      clientIdentifier(request),
+    );
+    if (!rateLimit.admitted) {
+      return NextResponse.json(
+        { error: "Too many requests — try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        },
+      );
+    }
   }
-  const user = access.user;
 
   const body = (await request.json()) as RunSuggesterInput;
 
@@ -164,9 +187,46 @@ export async function POST(request: NextRequest) {
     budget_attempts: budgetAttempts,
   };
 
-  // Step 3: persist. Insert restricted to the two owner accounts by the
-  // "Only owners can insert suggestions" RLS policy — a non-owner
-  // authenticated user hitting this route fails here, not silently.
+  // `ranked` (the raw rank_wishlist_hybrid output, richer than the
+  // `candidates` shape passed into the prompt — it still has id/lat/lng)
+  // goes back to the client as-is so the UI can actually show the
+  // embeddings-driven ranking it was based on, not just the LLM's prose
+  // description of it.
+
+  // Step 3: persist, owner only. A public/demo run is never saved — built
+  // as an in-memory object matching the same shape instead, so the
+  // frontend renders identically either way without knowing which case
+  // it's in.
+  if (!isOwner) {
+    const now = new Date().toISOString();
+    const suggestion: Suggestion = {
+      id: randomUUID(),
+      status: "complete",
+      budget: body.budget,
+      departure_airport: body.departure_airport,
+      travel_month: body.travel_month,
+      nights: body.nights,
+      destination: suggesterResult.destination,
+      cost_breakdown: suggesterResult.costBreakdown,
+      total_cost: suggesterResult.totalCost,
+      created_by: "public",
+      created_at: now,
+      completed_at: now,
+    };
+    const steps: SuggestionStep[] = suggesterResult.steps.map((text, index) => ({
+      id: randomUUID(),
+      suggestion_id: suggestion.id,
+      step_order: index + 1,
+      kind: "text",
+      content: { text },
+      created_at: now,
+    }));
+    return NextResponse.json(
+      { suggestion, steps, candidates: ranked, applied },
+      { status: 201 },
+    );
+  }
+
   const { data: suggestion, error: insertError } = await supabase
     .from("suggestions")
     .insert({
@@ -178,19 +238,13 @@ export async function POST(request: NextRequest) {
       destination: suggesterResult.destination,
       cost_breakdown: suggesterResult.costBreakdown,
       total_cost: suggesterResult.totalCost,
-      created_by: user.id,
+      created_by: access.user!.id,
       completed_at: new Date().toISOString(),
     })
     .select()
     .single();
 
   if (insertError) {
-    if (insertError.code === "42501") {
-      return NextResponse.json(
-        { error: "Only the two owner accounts can run the suggester." },
-        { status: 403 },
-      );
-    }
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
@@ -206,11 +260,6 @@ export async function POST(request: NextRequest) {
     .insert(stepRows)
     .select();
 
-  // `ranked` (the raw rank_wishlist_hybrid output, richer than the
-  // `candidates` shape passed into the prompt — it still has id/lat/lng)
-  // goes back to the client as-is so the UI can actually show the
-  // embeddings-driven ranking it was based on, not just the LLM's prose
-  // description of it.
   if (stepsError) {
     // The suggestion itself saved fine; the steps are supplementary.
     // Return what we have rather than treating this as a full failure.

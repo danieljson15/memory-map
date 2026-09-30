@@ -4,15 +4,39 @@ import { getEmbedding, getEmbeddings } from "@/lib/embeddings";
 import { searchNearbyPlaces } from "@/lib/google-places";
 import { isPriceTier, priceTierFromGoogleLevel, withinPriceTier } from "@/lib/budget";
 import { rankNearbyCandidates } from "@/lib/recommendations";
+import { checkRateLimit, clientIdentifier } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { admitGoogleApiUsage, UsageLimitError } from "@/lib/usage";
 import type { NearbyRecommendationsInput } from "@/shared/api-types";
 
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
+
+  // Public by design — anyone can try the recommender. Only saving a
+  // result as a pin (POST /api/pins) is still owner-only. Since this
+  // triggers real, billable Google Nearby Search calls, public callers
+  // are both rate-limited per-client and metered on a separate, much
+  // smaller monthly counter (public_places_request) so a spike in demo
+  // traffic can't eat the owners' own search allowance.
   const access = await getOwnerAccess(supabase);
-  if (!access.user) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+  const isOwner = !!access.user;
+  const usageKind = isOwner ? "places_request" : "public_places_request";
+
+  if (!isOwner) {
+    const rateLimit = await checkRateLimit(
+      supabase,
+      "PUBLIC_NEARBY",
+      clientIdentifier(request),
+    );
+    if (!rateLimit.admitted) {
+      return NextResponse.json(
+        { error: "Too many requests — try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        },
+      );
+    }
   }
 
   const body = (await request.json()) as NearbyRecommendationsInput;
@@ -100,7 +124,7 @@ export async function POST(request: NextRequest) {
         supabase,
         { lat: body.lat, lng: body.lng, radiusMeters },
         async () => {
-          const usage = await admitGoogleApiUsage(supabase, "places_request");
+          const usage = await admitGoogleApiUsage(supabase, usageKind);
           return usage.admitted;
         },
       )

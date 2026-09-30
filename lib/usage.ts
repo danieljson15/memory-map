@@ -10,13 +10,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Defaults are deliberately conservative guesses for a two-person app
 // with occasional public traffic, not a measured figure — tune via env
 // vars, no code change needed. Map loads happen on every public page
-// view (the higher-volume, less predictable side); Places requests are
-// owner-gated (see lib/api-auth.ts), so a lower default there just
-// caps an unexpected loop or bug, not normal usage.
+// view (the higher-volume, less predictable side); places_request is
+// the owners' own (signed-in) search usage, so a lower default there
+// just caps an unexpected loop or bug, not normal usage.
 const DEFAULT_MAPS_JS_LOAD_ALLOWANCE = 1500; // ~50/day
 const DEFAULT_PLACES_REQUEST_ALLOWANCE = 300; // ~10/day
+// The public suggester/nearby-recommendations demo has no auth gate at
+// all, so its allowance is deliberately much smaller and tracked on its
+// own counter — a spike in anonymous demo traffic degrades the demo
+// itself, not the owners' own search allowance above.
+const DEFAULT_PUBLIC_PLACES_REQUEST_ALLOWANCE = 60; // ~2/day
 
-export type GoogleApiUsageKind = "maps_js_load" | "places_request";
+export type GoogleApiUsageKind =
+  | "maps_js_load"
+  | "places_request"
+  | "public_places_request";
 
 // Thrown by lib/google-places.ts when a cache miss would require an
 // actual Google call and this month's places_request allowance is
@@ -38,12 +46,20 @@ function envInt(name: string, fallback: number): number {
 }
 
 export function getMonthlyAllowance(kind: GoogleApiUsageKind): number {
-  return kind === "maps_js_load"
-    ? envInt("GOOGLE_MAPS_MONTHLY_LOAD_ALLOWANCE", DEFAULT_MAPS_JS_LOAD_ALLOWANCE)
-    : envInt(
+  switch (kind) {
+    case "maps_js_load":
+      return envInt("GOOGLE_MAPS_MONTHLY_LOAD_ALLOWANCE", DEFAULT_MAPS_JS_LOAD_ALLOWANCE);
+    case "public_places_request":
+      return envInt(
+        "GOOGLE_PUBLIC_PLACES_MONTHLY_REQUEST_ALLOWANCE",
+        DEFAULT_PUBLIC_PLACES_REQUEST_ALLOWANCE,
+      );
+    case "places_request":
+      return envInt(
         "GOOGLE_PLACES_MONTHLY_REQUEST_ALLOWANCE",
         DEFAULT_PLACES_REQUEST_ALLOWANCE,
       );
+  }
 }
 
 export interface UsageAdmission {
@@ -71,12 +87,12 @@ export async function admitGoogleApiUsage(
     { p_kind: kind },
   );
   if (readError) {
-    // Fail closed on the more publicly exposed surface (maps), fail
-    // open on the owner-gated one (places) — an owner hitting a
-    // transient DB error shouldn't be locked out of search, but a
-    // public visitor shouldn't get an unmetered Google Maps load just
-    // because the usage table had a hiccup.
-    if (kind === "maps_js_load") {
+    // Fail closed on the two unauthenticated surfaces (maps loads, public
+    // demo search), fail open on the owner-gated one (places_request) —
+    // an owner hitting a transient DB error shouldn't be locked out of
+    // search, but an anonymous visitor shouldn't get an unmetered Google
+    // call just because the usage table had a hiccup.
+    if (kind === "maps_js_load" || kind === "public_places_request") {
       return { admitted: false, count: allowance, allowance };
     }
     return { admitted: true, count: 0, allowance };

@@ -3,9 +3,28 @@
 ## Product boundary
 
 Memory Map is a public-read, owner-write travel map. Anyone can view pins and
-photos. Only the two emails configured in `supabase/schema.sql` may write or
-call metered recommendation routes. Trips, checklists, and AI suggestion
-history remain private to those owners.
+photos. Only the two emails configured in `supabase/schema.sql` may write —
+create/edit/delete pins, upload photos, save a nearby result to the wishlist.
+
+The suggester (`/api/suggest`) and nearby recommendations
+(`/api/recommendations/nearby`) are intentionally public too, as a live demo
+of the recommendation pipeline: anyone can run them against the owners'
+actual travel history/taste profile. This is safe to expose because the
+underlying wishlist/memory pins are already fully public via `GET /api/pins`;
+what's actually being protected is cost, not data. Both routes branch on
+`getOwnerAccess` internally (see `lib/api-auth.ts`) rather than gating on it:
+owners get their usual behavior (higher usage ceiling, suggestions persisted
+to history), public callers are rate-limited per-client
+(`lib/rate-limit.ts`'s `PUBLIC_SUGGEST`/`PUBLIC_NEARBY`) and, for the nearby
+route, metered on a separate and much smaller monthly counter
+(`public_places_request` in `lib/usage.ts`) so a spike in public demo traffic
+can't eat the owners' own search budget. A public suggester run is computed
+live and never persisted — "AI suggestion history remains private to owners"
+still holds; it just means the public path skips the insert rather than
+being blocked from running at all.
+
+Trips and checklists remain fully private to the two owners — no public path
+exists for those.
 
 ## Commands
 
@@ -36,10 +55,15 @@ block a bad push to main before it deploys.
   routes. Pin creation must continue to go through `/api/pins` so embedding is
   not bypassed.
 - `components/NearbyRecommendationsModal.tsx` asks the server for live nearby
-  candidates and saves explicit selections as wishlist pins.
+  candidates and saves explicit selections as wishlist pins. Browsing is
+  public; saving is owner-only — the `isOwner` prop (passed from
+  `app/page.tsx`) disables the Save button with "Sign in to save" for
+  everyone else instead of letting the save request fail with a 403.
 - `app/api/recommendations/nearby/route.ts` loads positive and negative memory
   signals, obtains three bounded Google Nearby result groups, batch-embeds
-  candidates, and ranks them in `lib/recommendations.ts`.
+  candidates, and ranks them in `lib/recommendations.ts`. Public by design
+  (see Product boundary); owner vs. public changes only the usage-cap kind
+  and whether a per-client rate limit applies, not the ranking itself.
 - `app/api/suggest/route.ts` is the separate destination-level trip suggester.
   It ranks stored wishlist rows with `rank_wishlist_hybrid` (dense taste-vector
   ranking fused with a full-text keyword ranking of the optional "mood" text via
@@ -47,7 +71,11 @@ block a bad push to main before it deploys.
   filter) and asks Groq for a structured result. The total is summed and checked
   against the budget in code (`runSuggesterWithinBudget`: retry, then 422).
   Estimates are not live prices, and the budget check verifies the number, not
-  that the estimate is realistic.
+  that the estimate is realistic. Public callers get the same result computed
+  live but skip the `suggestions`/`suggestion_steps` insert entirely (RLS
+  would reject it anyway — those tables are owner-only) — the route builds
+  an in-memory object matching the same shape so the frontend doesn't need
+  to know which case it's in.
 - `lib/budget.ts` holds the pure budget logic: trip budget to maximum price
   tier, Google price level to tier, and the filter predicate. Unknown price is
   never filtered out.
@@ -68,13 +96,22 @@ block a bad push to main before it deploys.
   fields and canonical Place ID become a durable pin. Re-check Google's
   current storage terms before changing which provider fields are persisted.
 - Keep Google attribution and source links attached to live results.
-- Authorization must be checked before metered calls. `lib/api-auth.ts` exists
-  for that purpose; RLS is still the final database boundary.
-- `GET /api/pins` and `GET /api/maps-config` take no session and are the only
-  fully public, unauthenticated routes. `lib/rate-limit.ts` throttles them
-  per-client per-minute (backed by `check_rate_limit` in `supabase/schema.sql`)
-  against scraping/abuse; this is separate from `lib/usage.ts`, which caps
-  Google Maps/Places cost over a month rather than request rate.
+- Authorization is checked before every metered call via `lib/api-auth.ts`'s
+  `getOwnerAccess`, but not every metered route hard-gates on the result —
+  `/api/suggest` and `/api/recommendations/nearby` branch on it instead (see
+  Product boundary) to give owners and public callers different usage
+  ceilings rather than blocking public callers outright. RLS is still the
+  final database boundary either way.
+- `GET /api/pins`, `GET /api/maps-config`, `POST /api/suggest`, and
+  `POST /api/recommendations/nearby` all take no session and are reachable
+  by anyone. `lib/rate-limit.ts` throttles all four per-client
+  (`check_rate_limit` in `supabase/schema.sql`) — a permissive per-minute
+  window for the first two (cheap reads), a much tighter per-hour window for
+  the latter two (each call is an LLM call or a live Google Places request).
+  This is separate from `lib/usage.ts`, which caps Google Maps/Places cost
+  over a month rather than request rate, and which tracks public nearby-
+  recommendation traffic on its own `public_places_request` counter so it
+  can't cannibalize the owners' own `places_request` allowance.
 
 ## Data model
 
@@ -109,3 +146,18 @@ The library also sets its own heavy box-shadow (`0px 16px 70px rgba(0,0,0,0.75)`
 under `overLight`) via an inline style on `.glass`, which any custom shadow
 must override with `!important` — a plain rule loses to the inline style
 regardless of source order, and silently doing nothing is easy to miss.
+
+Overriding `.glass`'s own background/box-shadow/backdrop-filter isn't enough
+to make a card read as fully opaque. The library renders a second element
+inside it — `<span class="glass__warp">`, absolutely positioned to cover the
+whole card — carrying its own hardcoded `backdrop-filter: blur(...)
+saturate(140%)` plus the SVG displacement/chromatic-aberration filter,
+independent of `.glass`'s own styling. `glass__warp` doesn't match a `.glass`
+selector (distinct class, not a descendant), so it silently keeps sampling
+and blurring whatever's behind the card even after `.glass` itself is made
+opaque — the actual cause of corner smudging on PinModal/SuggesterModal/
+NearbyRecommendationsModal, not the box-shadow. Fixed by hiding it outright
+(`.modal-card .glass__warp { display: none !important; }`, same for
+`.suggester-card`/`.recommendations-card`) — only safe because those three
+cards are deliberately opaque; the topbar keeps `glass__warp` since its
+translucent refraction effect is intentional there.

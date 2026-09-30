@@ -9,6 +9,13 @@ import type { NextRequest } from "next/server";
 // meant to blunt scraping/abuse of the public routes themselves.
 export const RATE_LIMITS = {
   PUBLIC_READ: { windowSeconds: 60, limit: 60 },
+  // The suggester and nearby-recommendations demo routes have no owner
+  // gate at all, and each call is expensive (an LLM call, or live Google
+  // Places + embedding calls) rather than a cheap DB read — a much
+  // tighter per-client window than PUBLIC_READ, on top of the separate
+  // public_places_request monthly cap in lib/usage.ts for the Google side.
+  PUBLIC_SUGGEST: { windowSeconds: 3600, limit: 5 },
+  PUBLIC_NEARBY: { windowSeconds: 3600, limit: 5 },
 } as const;
 
 export type RateLimitKind = keyof typeof RATE_LIMITS;

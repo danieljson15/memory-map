@@ -13,6 +13,11 @@ import type {
 interface SuggesterModalProps {
   // Current map center, used as the anchor for the optional location filter.
   center: { lat: number; lng: number };
+  // Public visitors can run the suggester (see app/api/suggest/route.ts),
+  // but per CLAUDE.md suggestion history stays owner-private — their run
+  // is computed live and returned, never saved. Surfaced here so the
+  // result view can say so rather than implying it joined some history.
+  isOwner: boolean;
   onClose: () => void;
 }
 
@@ -20,7 +25,7 @@ type ViewState = "form" | "loading" | "result" | "error";
 
 const STEP_REVEAL_DELAY_MS = 550;
 
-export default function SuggesterModal({ center, onClose }: SuggesterModalProps) {
+export default function SuggesterModal({ center, isOwner, onClose }: SuggesterModalProps) {
   const [view, setView] = useState<ViewState>("form");
   const [budget, setBudget] = useState("");
   const [departureAirport, setDepartureAirport] = useState("");
@@ -242,6 +247,11 @@ export default function SuggesterModal({ center, onClose }: SuggesterModalProps)
                 ? "From your wishlist"
                 : "New idea — not on your wishlist yet"}
             </p>
+            {!isOwner && (
+              <p className="suggester-badge">
+                Demo run against the owners&apos; travel history — not saved
+              </p>
+            )}
 
             {candidates.length > 0 && (
               <div className="candidates-list">

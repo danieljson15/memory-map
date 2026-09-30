@@ -442,6 +442,17 @@ create table if not exists public.google_api_usage (
   primary key (kind, period)
 );
 
+-- 'public_places_request' tracks unauthenticated demo traffic (the public
+-- suggester and nearby-recommendations pages) on its own counter, separate
+-- from 'places_request' (the owners' own usage) — so a spike in public
+-- demo traffic can't eat the budget the owners rely on for their own
+-- search. Re-applied on every run since the table may already exist from
+-- an earlier version of this schema with the narrower check.
+alter table public.google_api_usage drop constraint if exists google_api_usage_kind_check;
+alter table public.google_api_usage
+  add constraint google_api_usage_kind_check
+  check (kind in ('maps_js_load', 'places_request', 'public_places_request'));
+
 alter table public.google_api_usage enable row level security;
 revoke all on public.google_api_usage from public, anon, authenticated;
 
@@ -455,7 +466,7 @@ declare
   new_count integer;
   current_period text := to_char(now() at time zone 'utc', 'YYYY-MM');
 begin
-  if p_kind not in ('maps_js_load', 'places_request') then
+  if p_kind not in ('maps_js_load', 'places_request', 'public_places_request') then
     raise exception 'Unknown Google API usage kind: %', p_kind;
   end if;
 
