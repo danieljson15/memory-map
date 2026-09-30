@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "embed:backfill": "tsx scripts/backfill-embeddings.ts"
   },
   "dependencies": {
+    "@googlemaps/js-api-loader": "^2.1.1",
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "leaflet": "^1.9.4",
@@ -20,11 +22,14 @@
     "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
-    "@types/leaflet": "^1.9.12",
+    "@types/google.maps": "^3.65.5",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20.14.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "dotenv": "^16.4.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.22",
     "tsx": "^4.19.1",
     "typescript": "^5.5.4"
   }
