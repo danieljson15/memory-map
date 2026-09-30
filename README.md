@@ -1,96 +1,182 @@
 # Memory Map
 
-A shared, private map for two people to track where they've been and where
-they want to go next — pin memories, build a wishlist, and get an
-AI-generated trip suggestion that's grounded in your own travel history
-instead of a generic "top 10 destinations" list.
-
-Built as a full-stack, end-to-end product: auth, a real Postgres schema with
-row-level security, vector search over your own data, and an LLM feature
-that actually uses that retrieval rather than bolting a chatbot on top.
+Memory Map is a shared travel map for two owners with a public read-only
+view. Anyone can browse the pins and photos; the two configured owner
+accounts can add memories, build a wishlist, and request personalized place
+or trip recommendations.
 
 ## Features
 
-- **Shared map** — sign in and see both accounts' pins together on one
-  Leaflet map of Europe, with light/dark tile themes and a place search
-  (OpenStreetMap/Nominatim) that flies the map to any location.
-- **Memories & wishlist** — pin a place you've been (with a title, note, and
-  photo) or a place you want to go. Two kinds of pins, one map.
-- **Trip planning** — group wishlist pins into trips with checklists.
-- **Taste-based recommendations** — every pin is embedded (Voyage AI) on
-  creation. A Postgres function (`pgvector`) ranks your wishlist by
-  similarity to the average embedding of the places you've actually loved,
-  so "recommended" means something rather than being arbitrary.
-- **AI trip suggester** — given a budget, month, and departure airport, an
-  LLM (Groq, Llama 3.3 70B) picks a destination from your ranked wishlist
-  (or proposes something new if it fits your taste better), estimates a
-  cost breakdown, and narrates its reasoning as discrete steps.
+- **Public map and gallery** — browse pins, notes, and photos without signing
+  in. The map uses Google Maps with light/dark themes; `/pins` provides a
+  searchable memory/wishlist gallery.
+- **Canonical places** — authenticated owners search Google Places with
+  session-based autocomplete, then save the canonical Place ID alongside
+  their own title, note, rating, tags, and optional photo.
+- **Memories and wishlist** — map clicks create free-form pins; place search
+  creates canonical pins. Both flows support memory and wishlist kinds.
+- **Automatic taste embeddings** — `POST /api/pins` embeds every new pin with
+  Voyage AI. A maintenance script backfills older or failed embeddings.
+- **Ranked wishlist** — pgvector compares wishlist embeddings with the average
+  of positively rated memory embeddings.
+- **Nearby recommendations** — Google Places supplies real nearby candidates;
+  Voyage embeds them in one batch, and a transparent score blends taste
+  similarity, rating, popularity, and distance. Only places explicitly saved
+  by an owner become durable wishlist pins.
+- **AI trip suggester** — Groq/Llama selects a whole-trip destination from the
+  ranked wishlist (or proposes a new one), estimates a cost breakdown, and
+  returns persisted reasoning steps. Costs are estimates, not live prices.
+- **Trip/checklist API** — the database and route handlers exist; a dedicated
+  trip-management UI is not implemented yet.
 
 ## Stack
 
-- Next.js 15 (App Router) + React 19 + TypeScript
-- Supabase — Postgres, Auth, Storage, row-level security
-- `pgvector` for embedding similarity search
-- Voyage AI — embeddings
-- Groq — LLM inference (Llama 3.3, OpenAI-compatible API, free tier)
-- react-leaflet — the map
-- `liquid-glass-react` — the floating nav and modal chrome
+- Next.js 15, React 19, and TypeScript
+- Supabase Postgres, Auth, Storage, and row-level security
+- pgvector
+- Google Maps JavaScript API and Places API (New)
+- Voyage AI embeddings
+- Groq chat completions
+- `liquid-glass-react`
 
-## Getting started
+## Access model
 
-### 1. Create a Supabase project
+- Pins, pin-photo metadata, and files in the `photos` bucket are public-read.
+- Trips, checklists, suggestions, and suggestion steps are private to the two
+  owner accounts.
+- All writes are restricted by RLS to the two email addresses configured in
+  `public.is_memory_map_owner()`.
+- Metered Google, Voyage, and Groq routes check owner access before making an
+  external request.
 
-1. Go to supabase.com, create a new project, wait for it to finish
-   provisioning.
-2. In the SQL Editor, run `supabase/schema.sql`, then
-   `supabase/rank-wishlist-function.sql`. Together these set up the tables,
-   RLS policies, the `pgvector` ranking function, and the storage bucket
-   for photos.
-3. In Project Settings -> API, copy the **Project URL** and the
-   **anon public** key.
-4. In Authentication -> Providers, confirm Email is enabled (on by default).
-5. Create your two accounts, either through the app itself once it's
-   running, or directly under Authentication -> Users.
+Self-service Supabase signup may remain enabled, but non-owner accounts cannot
+write or consume the metered recommendation endpoints.
 
-### 2. Configure environment variables
+## Setup
+
+### 1. Create and configure Supabase
+
+1. Create a Supabase project.
+2. Open `supabase/schema.sql` and replace `you@example.com` and
+   `partner@example.com` with the two owner emails.
+3. Run the complete `supabase/schema.sql` file in the SQL Editor.
+4. Run `supabase/rank-wishlist-function.sql`.
+5. Optionally run `supabase/seed.sql` after at least one owner account exists.
+
+The schema is idempotent and can upgrade an earlier Memory Map database. It
+creates the tables, vector extension/index, triggers, storage bucket, and RLS
+policies in one pass.
+
+### 2. Configure Google Cloud
+
+Enable billing and these APIs in one Google Cloud project:
+
+- Maps JavaScript API
+- Places API (New)
+
+Create two restricted keys:
+
+- A browser key restricted by HTTP referrer for the Maps JavaScript API.
+- A server key restricted to Places API (New).
+
+Create a map ID for Advanced Markers. `DEMO_MAP_ID` is used locally when no
+map ID is configured, but a project-owned map ID is recommended for deploys.
+
+Google Places responses use explicit field masks. The UI includes Google Maps
+attribution and links back to the source place. Review Google Maps Platform's
+current attribution, storage, EEA, and billing terms before deployment.
+
+### 3. Configure environment variables
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-Fill in your Supabase URL/anon key, a Voyage AI key (for embeddings), and a
-Groq key (for the trip suggester) — both have free tiers, no credit card
-required.
+Fill in:
 
-### 3. Run it locally
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+VOYAGE_API_KEY=
+GROQ_API_KEY=
+GOOGLE_PLACES_API_KEY=
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
+NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=
+```
+
+`SUPABASE_SERVICE_ROLE_KEY`, `VOYAGE_API_KEY`, `GROQ_API_KEY`, and
+`GOOGLE_PLACES_API_KEY` are server-only. Never give them a `NEXT_PUBLIC_`
+prefix.
+
+### 4. Install and run
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000, sign up, and click the map.
+Open <http://localhost:3000>. Public visitors can browse immediately; an
+owner signs in to add or recommend places.
 
-## Deploy
+## Embedding maintenance
 
-1. Push this project to a GitHub repo.
-2. In Vercel, "Add New Project" -> import that repo.
-3. Add the environment variables from `.env.local` to the Vercel project.
-4. Deploy.
+New UI-created pins are embedded automatically. To embed older pins or retry
+pins created during a Voyage outage:
 
-## Design
+```bash
+npm run embed:backfill
+```
 
-The UI follows an Apple-inspired visual language — glass and depth used
-deliberately for floating chrome (nav, modals), flat and content-first
-everywhere else, full dark-mode support throughout. See `CLAUDE.md` for the
-detailed design system and the reasoning behind specific implementation
-choices (the `liquid-glass-react` integration in particular required
-reverse-engineering the library's positioning model — documented there for
-anyone extending it).
+The script requires the Supabase service-role key because it runs outside a
+browser session and intentionally bypasses RLS.
+
+## Recommendation architecture
+
+```text
+Saved positive memories
+        ↓
+Voyage taste embedding
+        +
+Google Places nearby candidates
+        ↓ batch embeddings
+Taste similarity + rating + popularity + distance
+        ↓
+Top ten attributed recommendations
+        ↓ explicit owner action
+Saved wishlist pin
+```
+
+The existing trip suggester remains a separate destination-level flow:
+
+```text
+Memory embedding centroid
+        ↓ pgvector cosine similarity
+Ranked stored wishlist
+        ↓
+Groq trip choice and estimated budget
+```
+
+## Commands
+
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run embed:backfill
+```
+
+There is currently no automated test suite.
+
+`npm audit` currently reports three high-severity advisories in Next.js'
+transitive `postcss`/`sharp` packages. npm's offered remediation is a breaking
+upgrade to Next 16, so it has not been applied as part of this feature change.
+The non-breaking `nanoid` remediation has been applied.
 
 ## Roadmap
 
-- 3D globe view as an alternative to the flat map
-- Streaming the trip suggester's reasoning steps live instead of returning
-  them as a completed batch
-- Richer post composition (multiple photos per pin, tags)
+- Trip and checklist management UI
+- Multiple-photo composition
+- Streaming trip-suggester steps
+- Recommendation evaluation against explicit user feedback
