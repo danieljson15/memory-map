@@ -168,8 +168,13 @@ export async function POST(request: NextRequest) {
         { status: 503 },
       );
     }
-    const message =
-      error instanceof Error ? error.message : "Recommendation search failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+    // Not error.message — it can carry Google's raw response body (see
+    // lib/google-places.ts), which shouldn't reach the client even though
+    // this route is owner-gated.
+    console.error("Recommendation search failed:", error);
+    return NextResponse.json(
+      { error: "Recommendation search failed" },
+      { status: 502 },
+    );
   }
 }

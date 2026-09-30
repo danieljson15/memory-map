@@ -38,7 +38,10 @@ export async function GET(request: NextRequest) {
         { status: 503 },
       );
     }
-    const message = error instanceof Error ? error.message : "Place lookup failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+    // Not error.message — it can carry Google's raw response body (see
+    // lib/google-places.ts), which shouldn't reach the client even though
+    // this route is owner-gated.
+    console.error("Place details lookup failed:", error);
+    return NextResponse.json({ error: "Place lookup failed" }, { status: 502 });
   }
 }

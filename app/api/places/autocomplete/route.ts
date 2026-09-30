@@ -78,7 +78,10 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ predictions });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Autocomplete failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+    // Not error.message — it can carry Google's raw response body (see
+    // lib/google-places.ts), which shouldn't reach the client even though
+    // this route is owner-gated.
+    console.error("Autocomplete failed:", error);
+    return NextResponse.json({ error: "Autocomplete failed" }, { status: 502 });
   }
 }
