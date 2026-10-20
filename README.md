@@ -157,6 +157,102 @@ Ranked stored wishlist
 Groq trip choice and estimated budget
 ```
 
+## Engineering notes
+
+### Frontend ↔ backend
+
+```text
+Browser (React client components)
+  │  fetch("/api/...")  — JSON, session cookie attached
+  ▼
+Next.js route handlers (app/api/**/route.ts)
+  │  1. createSupabaseServerClient()  — reads the caller's session cookie
+  │  2. getOwnerAccess()              — 401/403 before any metered call
+  │  3. validate input → query Supabase / call Google, Voyage, Groq
+  ▼
+Supabase Postgres (RLS on every table)
+```
+
+- Components never talk to the database directly for data. The exceptions
+  are auth (the browser Supabase client owns the session) and photo
+  *uploads* to the public-read `photos` bucket; the photo's metadata is
+  still registered through `/api/pins/[id]/photos`.
+- Route handlers build a Supabase client from the request's cookies
+  (`lib/supabase/server.ts`), so queries run **as the signed-in user** and RLS
+  applies exactly as it would in the browser. The API checks owner access
+  first only to avoid spending Google/Voyage/Groq quota on callers who would
+  fail at the insert anyway; RLS remains the real boundary.
+- `shared/api-types.ts` is the single source of truth for request/response
+  shapes used on both sides.
+- Some routes are public on purpose (`GET /api/pins`, the suggester, nearby
+  recommendations). They are rate limited per client and, for Google calls,
+  metered on a separate monthly counter. See `CLAUDE.md` for the full
+  boundary.
+
+### Testing
+
+```bash
+npm test            # run everything once (what CI runs)
+npm run test:watch  # re-run on change
+```
+
+[Vitest](https://vitest.dev) with React Testing Library. Tests live in
+`tests/` and need no network, credentials, or running database:
+
+| Layer | Where | What it covers |
+|---|---|---|
+| Unit | `tests/*.test.ts` | Budget tiers, ranking math, cache keys, rate limiting, usage caps, owner auth, embedding batching, the suggester's budget-retry loop |
+| Route handlers | `tests/routes/` | Owner vs. public behavior, input validation, status-code mapping, that public suggester runs are never persisted |
+| Components | `tests/components/` | `PinModal` (create/edit, validation, duplicate-submit guard, upload rollback), `NearbyRecommendationsModal`, `AllPinsModal` |
+
+Supabase, Groq, Voyage, and Google are replaced with in-memory fakes
+(`tests/helpers.ts`, plus per-file fakes for `fetch` and storage). Tests assert
+on outcomes — what was sent, what is left in storage, what the user sees —
+rather than only that a mock was called.
+
+**Current limitations**
+
+- The fakes encode my assumptions about the real services. Nothing here
+  exercises a real Supabase, Google, Voyage, or Groq response.
+- The SQL functions (`rank_wishlist_hybrid`, `check_rate_limit`) and RLS
+  policies are untested; they would need a Postgres with pgvector.
+- Not covered yet: the trips/checklist/places/wishlist routes, `pins/[id]`
+  PATCH/DELETE, `SuggesterModal`, and the map components. There is no
+  browser-level end-to-end test.
+- Coverage is not measured, so no coverage figure is claimed.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`, on
+Node 20 with a read-only token:
+
+1. `npm ci` — clean install from the lockfile
+2. `npm run lint`
+3. `npm run typecheck` (`tsc --noEmit`)
+4. `npm test`
+5. `npm run build` — production Next.js build
+
+It is a check, not a deploy: Vercel deploys independently. The check only
+blocks merges if branch protection on `main` requires it.
+
+### Tradeoffs worth knowing
+
+- **Budget is enforced in code, not trusted to the LLM.** The suggester sums
+  the model's cost breakdown itself, retries with the exact overage, then
+  returns 422. It checks the number, not whether the estimate is realistic.
+- **Usage metering is check-then-increment** (two round trips), so a burst of
+  concurrent requests can slip a few calls past the cap. That is acceptable
+  for an early-warning breaker in front of Google's own hard quota.
+- **Failure policy is deliberate per surface:** the rate limiter and the
+  owner-only Places counter fail open on a database error; the public
+  endpoints' usage counter fails closed so an outage can't become unmetered
+  spend.
+- **Pin creation is a multi-step flow, not a transaction** (upload → create
+  pin → attach photo). `PinModal` compensates on failure by deleting the pin
+  and the uploaded file, so a retry doesn't leave duplicates or orphans.
+- **Embedding failures don't block saving a pin.** The pin is stored without
+  an embedding and picked up later by `npm run embed:backfill`.
+
 ## Commands
 
 ```bash
@@ -164,10 +260,10 @@ npm run dev
 npm run build
 npm run start
 npm run lint
+npm run typecheck
+npm test
 npm run embed:backfill
 ```
-
-There is currently no automated test suite.
 
 `npm audit` currently reports three high-severity advisories in Next.js'
 transitive `postcss`/`sharp` packages. npm's offered remediation is a breaking
