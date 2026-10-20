@@ -15,15 +15,31 @@ export const CACHE_TTL_MS = {
   NEARBY_SEARCH: 1000 * 60 * 60 * 6, // 6 hours
 } as const;
 
+// Rebuilds a value with object keys sorted at every depth, so two
+// structurally equal params serialize identically regardless of key order.
+// Arrays keep their order (it is meaningful).
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, nested]) => [key, sortKeysDeep(nested)]),
+    );
+  }
+  return value;
+}
+
 // A hash of the normalized request, not the raw params — same input
 // always produces the same key regardless of object key order, so a
 // repeat request from a different route or caller is still a cache hit.
-// JSON.stringify's second argument, when given an array, acts as an
-// allow-list of keys in that array's order — passing the sorted key
-// list is what makes this deterministic without writing a custom
-// stable-stringify.
+// Keys are sorted recursively: the earlier version passed the sorted
+// top-level keys to JSON.stringify as a replacer allow-list, which also
+// applies to nested objects and silently dropped every nested property.
+// For flat params the serialized string is unchanged, so existing cache
+// entries keep their keys.
 export function cacheKey(namespace: string, params: Record<string, unknown>): string {
-  const normalized = JSON.stringify(params, Object.keys(params).sort());
+  const normalized = JSON.stringify(sortKeysDeep(params));
   const hash = createHash("sha256").update(normalized).digest("hex");
   return `${namespace}:${hash}`;
 }

@@ -6,9 +6,19 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only token: this workflow only checks out and builds code.
+permissions:
+  contents: read
+
+# A newer push to the same branch/PR supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -22,5 +32,9 @@ jobs:
       - run: npm run lint
 
       - run: npm run typecheck
+
+      # Unit, route, and component tests. All external services are faked,
+      # so no secrets or network access are needed.
+      - run: npm test
 
       - run: npm run build

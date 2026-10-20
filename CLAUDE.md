@@ -34,11 +34,24 @@ npm run build
 npm run start
 npm run lint
 npm run typecheck
+npm test
+npm run test:watch
 npm run embed:backfill
 ```
 
-There is no automated test suite yet. `.github/workflows/ci.yml` runs lint,
-typecheck, and build on push/PR to `main` — it's a merge gate, separate from
+Tests (Vitest, `tests/**/*.test.{ts,tsx}`) cover three layers: `lib/` unit
+tests (budget, ranking math, suggester retry/validation, cache, rate limit,
+usage caps, owner auth, embeddings), route-handler tests in `tests/routes/`
+(pins, suggest, nearby, photo delete — owner vs. public branching, validation,
+status-code mapping), and component tests in `tests/components/`
+(`NearbyRecommendationsModal`, `AllPinsModal`; run under happy-dom via a
+`// @vitest-environment happy-dom` docblock, Testing Library). Supabase, Groq,
+Voyage, and Google are faked (`tests/helpers.ts`'s `fakeDb`), so the suite
+needs no network or env vars. Not covered: the other routes (trips, checklist,
+places, wishlist, `pins/[id]` PATCH/DELETE), `PinModal`/`SuggesterModal`/map
+components, and the SQL functions (`rank_wishlist_hybrid`, `check_rate_limit`).
+`.github/workflows/ci.yml` runs lint, typecheck, tests,
+and build on push/PR to `main` — it's a merge gate, separate from
 Vercel's own build-on-push, which only proves the code builds and doesn't
 block a bad push to main before it deploys.
 
