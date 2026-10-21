@@ -23,6 +23,19 @@ live and never persisted — "AI suggestion history remains private to owners"
 still holds; it just means the public path skips the insert rather than
 being blocked from running at all.
 
+Place search (`/api/places/autocomplete`, `/api/places/details`) is public
+as well: anyone can search and fly the map to a result, but only owners get
+the new-pin form for it (`GoogleMapView` drops the selection for everyone
+else). Same pattern as the demo routes: owners keep `places_request` with no
+rate limit; public callers share the `PUBLIC_SEARCH` per-client bucket
+(60/hour, sized for several autocomplete requests per search) and their own
+monthly `public_search_request` counter, separate from both the owners' and
+the demo's. Adding a usage kind needs `supabase/schema.sql` re-run (the kind
+is in a check constraint and in `increment_google_api_usage`); until then the
+increment is rejected, and `admitGoogleApiUsage` fails closed for the
+unauthenticated kinds on that error, so the new public route is unavailable
+rather than unmetered.
+
 Trips and checklists remain fully private to the two owners — no public path
 exists for those.
 
@@ -61,8 +74,8 @@ block a bad push to main before it deploys.
 - `components/MapView.tsx` loads Google Maps lazily, fetches public pins through
   `/api/pins`, renders advanced markers, and opens `PinModal` for map clicks or
   canonical Google Places selections.
-- `components/SearchBox.tsx` calls the authenticated autocomplete/details
-  routes. It maintains a UUID session token across typing and selection.
+- `components/SearchBox.tsx` calls the (public, rate-limited) autocomplete/
+  details routes. It maintains a UUID session token across typing and selection.
 - `components/PinModal.tsx` uploads optional photos directly to the public-read
   `photos` bucket, but creates pins and registers photo metadata through API
   routes. Pin creation must continue to go through `/api/pins` so embedding is
@@ -120,20 +133,24 @@ block a bad push to main before it deploys.
 - Keep Google attribution and source links attached to live results.
 - Authorization is checked before every metered call via `lib/api-auth.ts`'s
   `getOwnerAccess`, but not every metered route hard-gates on the result —
-  `/api/suggest` and `/api/recommendations/nearby` branch on it instead (see
+  `/api/suggest`, `/api/recommendations/nearby`, and the two
+  `/api/places/*` search routes branch on it instead (see
   Product boundary) to give owners and public callers different usage
   ceilings rather than blocking public callers outright. RLS is still the
   final database boundary either way.
-- `GET /api/pins`, `GET /api/maps-config`, `POST /api/suggest`, and
-  `POST /api/recommendations/nearby` all take no session and are reachable
-  by anyone. `lib/rate-limit.ts` throttles all four per-client
-  (`check_rate_limit` in `supabase/schema.sql`) — a permissive per-minute
-  window for the first two (cheap reads), a much tighter per-hour window for
-  the latter two (each call is an LLM call or a live Google Places request).
+- `GET /api/pins`, `GET /api/maps-config`, `POST /api/suggest`,
+  `POST /api/recommendations/nearby`, `POST /api/places/autocomplete`, and
+  `GET /api/places/details` all take no session and are reachable by anyone.
+  `lib/rate-limit.ts` throttles them per-client (`check_rate_limit` in
+  `supabase/schema.sql`) — a permissive per-minute window for the first two
+  (cheap reads), a much tighter per-hour window for the suggester and nearby
+  routes (each call is an LLM call or a live Google Places request), and a
+  middle per-hour window for search (`PUBLIC_SEARCH`, owners exempt).
   This is separate from `lib/usage.ts`, which caps Google Maps/Places cost
   over a month rather than request rate, and which tracks public nearby-
-  recommendation traffic on its own `public_places_request` counter so it
-  can't cannibalize the owners' own `places_request` allowance.
+  recommendation traffic on its own `public_places_request` counter and
+  public search on `public_search_request`, so neither can cannibalize the
+  owners' own `places_request` allowance.
 
 ## Data model
 

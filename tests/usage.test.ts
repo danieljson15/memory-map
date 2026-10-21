@@ -1,14 +1,27 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { admitGoogleApiUsage, getMonthlyAllowance } from "@/lib/usage";
 import { fakeSupabase } from "./helpers";
 
-afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe("getMonthlyAllowance", () => {
   it("uses defaults, with the public demo budget far below the owners'", () => {
     expect(getMonthlyAllowance("public_places_request")).toBeLessThan(
       getMonthlyAllowance("places_request"),
     );
+  });
+
+  it("gives public search its own budget, separate from the demo and the owners", () => {
+    expect(getMonthlyAllowance("public_search_request")).toBe(300);
+    vi.stubEnv("GOOGLE_PUBLIC_SEARCH_MONTHLY_REQUEST_ALLOWANCE", "50");
+    expect(getMonthlyAllowance("public_search_request")).toBe(50);
+    expect(getMonthlyAllowance("public_places_request")).toBe(60);
   });
 
   it("honors a valid env override", () => {
@@ -47,7 +60,7 @@ describe("admitGoogleApiUsage", () => {
     expect(rpc).not.toHaveBeenCalledWith("increment_google_api_usage", expect.anything());
   });
 
-  it.each(["maps_js_load", "public_places_request"] as const)(
+  it.each(["maps_js_load", "public_places_request", "public_search_request"] as const)(
     "fails CLOSED on a read error for unauthenticated surface %s",
     async (kind) => {
       const { client } = fakeSupabase({
@@ -64,7 +77,20 @@ describe("admitGoogleApiUsage", () => {
     expect((await admitGoogleApiUsage(client, "places_request")).admitted).toBe(true);
   });
 
-  it("still admits if the increment itself fails", async () => {
+  it.each(["maps_js_load", "public_places_request", "public_search_request"] as const)(
+    "fails CLOSED on an increment error for unauthenticated surface %s",
+    async (kind) => {
+      // Also what happens if a new counter kind ships before schema.sql is
+      // re-run: the read returns 0, then the increment rejects the kind.
+      const { client } = fakeSupabase({
+        get_google_api_usage: () => ({ data: 0, error: null }),
+        increment_google_api_usage: () => ({ data: null, error: { message: "Unknown Google API usage kind" } }),
+      });
+      expect((await admitGoogleApiUsage(client, kind)).admitted).toBe(false);
+    },
+  );
+
+  it("still admits an OWNER if the increment itself fails", async () => {
     const { client } = fakeSupabase({
       get_google_api_usage: () => ({ data: 2, error: null }),
       increment_google_api_usage: () => ({ data: null, error: { message: "db" } }),

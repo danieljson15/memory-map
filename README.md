@@ -10,9 +10,10 @@ or trip recommendations.
 - **Public map and gallery** — browse pins, notes, and photos without signing
   in. The map uses Google Maps with light/dark themes; `/pins` provides a
   searchable memory/wishlist gallery.
-- **Canonical places** — authenticated owners search Google Places with
-  session-based autocomplete, then save the canonical Place ID alongside
-  their own title, note, rating, tags, and optional photo.
+- **Canonical places** — anyone can search Google Places with session-based
+  autocomplete and fly the map to a result; owners can then save the
+  canonical Place ID alongside their own title, note, rating, tags, and
+  optional photo.
 - **Memories and wishlist** — map clicks create free-form pins; place search
   creates canonical pins. Both flows support memory and wishlist kinds.
 - **Automatic taste embeddings** — `POST /api/pins` embeds every new pin with
@@ -47,10 +48,13 @@ or trip recommendations.
 - All writes are restricted by RLS to the two email addresses configured in
   `public.is_memory_map_owner()`.
 - Metered Google, Voyage, and Groq routes check owner access before making an
-  external request.
+  external request. Place search, the trip suggester, and nearby
+  recommendations are deliberately open to the public, but non-owners are
+  rate limited per client and metered on separate, smaller monthly counters
+  so public use can't consume the owners' budget.
 
 Self-service Supabase signup may remain enabled, but non-owner accounts cannot
-write or consume the metered recommendation endpoints.
+write, and they get the same limits as anonymous visitors.
 
 ## Setup
 
@@ -184,8 +188,8 @@ Supabase Postgres (RLS on every table)
   fail at the insert anyway; RLS remains the real boundary.
 - `shared/api-types.ts` is the single source of truth for request/response
   shapes used on both sides.
-- Some routes are public on purpose (`GET /api/pins`, the suggester, nearby
-  recommendations). They are rate limited per client and, for Google calls,
+- Some routes are public on purpose (`GET /api/pins`, place search, the
+  suggester, nearby recommendations). They are rate limited per client and, for Google calls,
   metered on a separate monthly counter. See `CLAUDE.md` for the full
   boundary.
 
