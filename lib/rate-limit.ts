@@ -16,6 +16,10 @@ export const RATE_LIMITS = {
   // public_places_request monthly cap in lib/usage.ts for the Google side.
   PUBLIC_SUGGEST: { windowSeconds: 3600, limit: 5 },
   PUBLIC_NEARBY: { windowSeconds: 3600, limit: 5 },
+  // Anonymous place search. Autocomplete fires once per debounced pause
+  // while typing, so one search is several requests; this allows roughly
+  // ten searches an hour (autocomplete and details share the bucket).
+  PUBLIC_SEARCH: { windowSeconds: 3600, limit: 60 },
 } as const;
 
 export type RateLimitKind = keyof typeof RATE_LIMITS;

@@ -1,15 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOwnerAccess } from "@/lib/api-auth";
 import { autocompletePlaces } from "@/lib/google-places";
+import { checkRateLimit, clientIdentifier } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { admitGoogleApiUsage } from "@/lib/usage";
 import type { PlaceAutocompleteInput } from "@/shared/api-types";
 
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
+  // Public by design: anyone can search the map. Searching only pans the
+  // map — saving a place as a pin is still owner-only (POST /api/pins).
+  // Owners use their own allowance; public callers are rate limited per
+  // client and metered on a separate, smaller monthly counter so anonymous
+  // searches can't eat the owners' budget or the nearby demo's.
   const access = await getOwnerAccess(supabase);
-  if (!access.user) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+  const isOwner = !!access.user;
+
+  if (!isOwner) {
+    const rateLimit = await checkRateLimit(
+      supabase,
+      "PUBLIC_SEARCH",
+      clientIdentifier(request),
+    );
+    if (!rateLimit.admitted) {
+      return NextResponse.json(
+        { error: "Too many searches — try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        },
+      );
+    }
   }
 
   let body: PlaceAutocompleteInput;
@@ -50,7 +71,10 @@ export async function POST(request: NextRequest) {
 
   // Checked (and counted) only once the request is well-formed, so a
   // malformed call never spends usage quota for nothing.
-  const usage = await admitGoogleApiUsage(supabase, "places_request");
+  const usage = await admitGoogleApiUsage(
+    supabase,
+    isOwner ? "places_request" : "public_search_request",
+  );
   if (!usage.admitted) {
     return NextResponse.json(
       {
@@ -79,8 +103,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ predictions });
   } catch (error) {
     // Not error.message — it can carry Google's raw response body (see
-    // lib/google-places.ts), which shouldn't reach the client even though
-    // this route is owner-gated.
+    // lib/google-places.ts), which shouldn't reach the client.
     console.error("Autocomplete failed:", error);
     return NextResponse.json({ error: "Autocomplete failed" }, { status: 502 });
   }

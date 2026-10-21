@@ -123,7 +123,7 @@ export default function SearchBox({
       <input
         type="text"
         className="search-input"
-        placeholder={enabled ? "Search for a real place" : "Sign in to search places"}
+        placeholder={enabled ? "Search for a real place" : "Loading map…"}
         aria-label="Search for a place"
         disabled={!enabled}
         value={query}

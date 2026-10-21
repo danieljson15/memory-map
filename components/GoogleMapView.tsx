@@ -413,10 +413,12 @@ export default function GoogleMapView({
 
       <SearchBox
         mapRef={mapRef}
-        enabled={!!userId && mapReady}
-        onSelectLocation={(place) =>
-          setPendingPin({ lat: place.lat, lng: place.lng, place })
-        }
+        enabled={mapReady}
+        // Anyone can search; only owners get the new-pin form for the
+        // result. Visitors just fly to it (SearchBox pans the map itself).
+        onSelectLocation={(place) => {
+          if (userId) setPendingPin({ lat: place.lat, lng: place.lng, place });
+        }}
       />
 
       <button
