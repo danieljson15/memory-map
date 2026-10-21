@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { admitGoogleApiUsage, getMonthlyAllowance } from "@/lib/usage";
 import { fakeSupabase } from "./helpers";
 
-afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe("getMonthlyAllowance", () => {
   it("uses defaults, with the public demo budget far below the owners'", () => {

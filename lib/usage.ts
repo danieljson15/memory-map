@@ -108,6 +108,7 @@ export async function admitGoogleApiUsage(
     { p_kind: kind },
   );
   if (readError) {
+    console.error(`[usage] read failed for ${kind}:`, readError.message);
     // Fail closed on the unauthenticated surfaces (maps loads, the public
     // demo, public search), fail open on the owner-gated one (places_request) —
     // an owner hitting a transient DB error shouldn't be locked out of
@@ -128,6 +129,10 @@ export async function admitGoogleApiUsage(
     { p_kind: kind },
   );
   if (incrementError) {
+    // Logged because, for the unauthenticated kinds, the visitor only sees
+    // "usage limit reached"; the real cause (often schema.sql not re-run
+    // after adding a kind) is only visible here.
+    console.error(`[usage] increment failed for ${kind}:`, incrementError.message);
     // Same split as the read error above. For the unauthenticated kinds
     // this also covers the counter kind being unknown to the database
     // (schema.sql not yet re-run after adding one): get_google_api_usage
