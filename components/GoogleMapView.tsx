@@ -73,7 +73,15 @@ export default function GoogleMapView({
   } | null>(null);
   const [editingPin, setEditingPin] = useState<PinWithPhotos | null>(null);
   const [loadingPins, setLoadingPins] = useState(true);
-  const [mapReady, setMapReady] = useState(false);
+  // The live map instance, as state rather than a ready flag: toggling the
+  // theme recreates the map (colorScheme is init-only), and a boolean would
+  // go true → false → true within one batched render, so the marker effect
+  // below would never re-run and the new map would have no markers. A new
+  // instance is always a new value, so the effect re-runs for every map.
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const mapReady = map !== null;
+  // Mirrors `map` for SearchBox, which reads it inside callbacks.
+  const mapRef = useRef<google.maps.Map | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
   const [photoOverrides, setPhotoOverrides] = useState<Record<string, string>>(
     {},
@@ -84,7 +92,6 @@ export default function GoogleMapView({
   });
 
   const mapElementRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<
     Record<string, google.maps.marker.AdvancedMarkerElement>
   >({});
@@ -107,14 +114,14 @@ export default function GoogleMapView({
     let idleListener: google.maps.MapsEventListener | undefined;
 
     async function initializeMap() {
-      setMapReady(false);
+      setMap(null);
       setMapError(null);
       try {
         const [{ Map }, { AdvancedMarkerElement }] = await loadGoogleMaps();
         void AdvancedMarkerElement;
         if (cancelled || !mapElementRef.current) return;
 
-        const map = new Map(mapElementRef.current, {
+        const createdMap = new Map(mapElementRef.current, {
           center: lastViewRef.current.center,
           zoom: lastViewRef.current.zoom,
           mapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID",
@@ -125,10 +132,9 @@ export default function GoogleMapView({
           clickableIcons: true,
           gestureHandling: "greedy",
         });
-        mapRef.current = map;
         infoWindowRef.current = new google.maps.InfoWindow();
 
-        clickListener = map.addListener(
+        clickListener = createdMap.addListener(
           "click",
           (event: google.maps.MapMouseEvent | google.maps.IconMouseEvent) => {
             const location = event.latLng;
@@ -165,17 +171,18 @@ export default function GoogleMapView({
             setPendingPin({ lat, lng });
           },
         );
-        idleListener = map.addListener("idle", () => {
-          const center = map.getCenter();
+        idleListener = createdMap.addListener("idle", () => {
+          const center = createdMap.getCenter();
           if (!center) return;
           const nextCenter = { lat: center.lat(), lng: center.lng() };
           lastViewRef.current = {
             center: nextCenter,
-            zoom: map.getZoom() ?? EUROPE_ZOOM,
+            zoom: createdMap.getZoom() ?? EUROPE_ZOOM,
           };
           centerCallbackRef.current?.(nextCenter);
         });
-        setMapReady(true);
+        mapRef.current = createdMap;
+        setMap(createdMap);
       } catch (error) {
         if (!cancelled) {
           setMapError(
@@ -222,9 +229,8 @@ export default function GoogleMapView({
   }, [refreshToken]);
 
   useEffect(() => {
-    const map = mapRef.current;
     const infoWindow = infoWindowRef.current;
-    if (!mapReady || !map || !infoWindow) return;
+    if (!map || !infoWindow) return;
     const activeMap: google.maps.Map = map;
     const activeInfoWindow: google.maps.InfoWindow = infoWindow;
 
@@ -393,7 +399,7 @@ export default function GoogleMapView({
         marker.map = null;
       });
     };
-  }, [mapReady, photoOverrides, pins, userId, focusPinId]);
+  }, [map, photoOverrides, pins, userId, focusPinId]);
 
   return (
     <>
